@@ -216,3 +216,17 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - 9 neue Ed25519-Tests: DID-Format, sign+verify, wrong-signer, tampered-payload,
   tampered-sig, short-sig, deterministic-seed, cross-verify-with-RCT, large-payload
 - Gesamt: 81/81 Tests gruen (8 Cap + 10 Proc + 10 Sched + 22 IPC + 15 DID + 16 RCT)
+
+## K-Sprint 7: Knowledge Graph (03.08.2026)
+
+`kernel/src/knowledge_graph.rs` — Nativer Triple-Store fuer strukturiertes Wissen.
+
+- `KnowledgeGraph` — Triple-Store (Subject-Predicate-Object) mit SPO/OSP/PSO Indices
+- `Entity` — eindeutige ID, Label, Type, Creator, Triple-Counter
+- `ObjectValue` — Entity-Referenz, Integer, String, Bytes, Boolean
+- Capability-gated: `create_entity()`, `add_triple()`, `query()`, `remove_triple()`, `delete_entity()` pruefen Caps
+- `QueryPattern` — Wildcard-Query (None = Match-All)
+- `outgoing()` / `incoming()` — gerichtete Graph-Traversierung
+- `transitive_closure()` — Pfadsuche ueber mehrere Hops mit max_depth + Zyklus-Schutz (visited-Set)
+- `grant_read()` — Delegation von Lesezugriff an andere Prozesse
+- 18/18 neue Tests + 81/81 bestehende = 99/99 gesamt gruen
