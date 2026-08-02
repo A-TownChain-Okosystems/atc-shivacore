@@ -20,6 +20,7 @@ mod gdt;
 mod interrupts;
 mod memory;
 mod serial;
+mod capability;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
