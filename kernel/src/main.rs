@@ -26,6 +26,7 @@ mod scheduler;
 mod ipc;
 mod did;
 mod remote_caps;
+mod knowledge_graph;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
