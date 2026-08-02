@@ -171,7 +171,8 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - `close_channel()` — schliesst Channel + kaskadierender Capability-Widerruf
 - `close_all_for()` — schliesst alle Channels eines Prozesses (fuer kill())
 - FIFO-Buffer mit konfigurierbarer Kapazitaet
-- 12/12 neue IPC-Tests + 28/28 bestehende = 40/40 gesamt gruen
+- 22/22 IPC-Tests (12 Basis + 10 Capability-Gating) + 28/28 bestehende = 50/50 gesamt gruen
+- Security-Fix: recv() prueft Capability VOR Buffer-Inspektion (verhindert Info-Lecks)
 
 ## K-Sprint 5: Inter-Process Communication (03.08.2026)
 
@@ -184,4 +185,5 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - `close_channel()` — schliesst Channel + kaskadierender Capability-Widerruf
 - `close_all_for()` — schliesst alle Channels eines Prozesses (fuer kill())
 - FIFO-Buffer mit konfigurierbarer Kapazitaet
-- 12/12 neue IPC-Tests + 28/28 bestehende = 40/40 gesamt gruen
+- 22/22 IPC-Tests (12 Basis + 10 Capability-Gating) + 28/28 bestehende = 50/50 gesamt gruen
+- Security-Fix: recv() prueft Capability VOR Buffer-Inspektion (verhindert Info-Lecks)
