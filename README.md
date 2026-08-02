@@ -135,3 +135,15 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - `CapabilityTable` (Spinlock-geschuetzt, BTreeMap)
 - `create()` / `delegate()` (Attenuation) / `check()` / `revoke()` (kaskadierend)
 - 8/8 Tests gruen (`cargo test`)
+
+## K-Sprint 3b: Prozessverwaltung (03.08.2026)
+
+`kernel/src/process.rs` — ProcessManager mit Capability-Integration.
+
+- `ProcessControlBlock` (PID, Typ, Prioritaet, Zustand, Parent/Children)
+- `spawn()` — erzeugt Prozess + automatische Memory-Cap (READ/WRITE/EXEC/DELEGATE)
+- `spawn_child()` — Kind-Prozess mit Parent-Verknuepfung
+- `kill()` — kaskadierender Capability-Widerruf + Zustand→Terminated
+- `wait()` — Exit-Code-Abfrage
+- Zustandsautomaten: Ready↔Running, →Blocked→Ready (Preemption/Block)
+- 10/10 neue Tests + 8/8 Capability-Tests = 18/18 gesamt gruen
