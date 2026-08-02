@@ -124,3 +124,14 @@ Arbeit, K-Sprint 3), Hardware-Breite, Jahre an Battle-Testing.
 blockchain-nativer Architektur als Ziel — nicht "schon jetzt überlegen".
 Für alle Agenten, die an diesem Projekt arbeiten: bitte diese Erwartungshaltung
 in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache.
+
+---
+
+## K-Sprint 3a: Capability-System (03.08.2026)
+
+`kernel/src/capability.rs` — Rust-Port des Python-Capability-Systems.
+
+- `Rights` (Bitfield: READ/WRITE/EXEC/DELEGATE)
+- `CapabilityTable` (Spinlock-geschuetzt, BTreeMap)
+- `create()` / `delegate()` (Attenuation) / `check()` / `revoke()` (kaskadierend)
+- 8/8 Tests gruen (`cargo test`)
