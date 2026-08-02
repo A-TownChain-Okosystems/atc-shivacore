@@ -204,3 +204,15 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - `LocalCap` — lokale Capability mit Verbrauchszaehler (max_operations)
 - `NonceStore` — Replay-Schutz (BTreeSet)
 - 22/22 Tests (6 DID + 16 RCT) + 50/50 bestehende = 72/72 gesamt gruen
+
+## K-Sprint 6b: Ed25519 Signatur-Implementierung (03.08.2026)
+
+`kernel/src/did.rs` erweitert:
+- **Ed25519Signer** — echte Ed25519-Signaturen mit `ed25519-dalek` crate
+- `did:shivacore:ed25519:<hex-pubkey>` Format (32-byte Public Key = 64 hex chars)
+- 64-Byte Ed25519-Signaturen, verifiziert durch `VerifyingKey::verify()`
+- `from_seed()` — deterministische Schluesselerzeugung fuer reproduzierbare Tests
+- SoftwareSigner bleibt fuer deterministische Logik-Tests (XOR-basiert)
+- 9 neue Ed25519-Tests: DID-Format, sign+verify, wrong-signer, tampered-payload,
+  tampered-sig, short-sig, deterministic-seed, cross-verify-with-RCT, large-payload
+- Gesamt: 81/81 Tests gruen (8 Cap + 10 Proc + 10 Sched + 22 IPC + 15 DID + 16 RCT)
