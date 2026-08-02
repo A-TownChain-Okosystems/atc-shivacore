@@ -24,6 +24,8 @@ mod capability;
 mod process;
 mod scheduler;
 mod ipc;
+mod did;
+mod remote_caps;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
