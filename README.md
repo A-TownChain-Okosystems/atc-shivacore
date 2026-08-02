@@ -187,3 +187,20 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - FIFO-Buffer mit konfigurierbarer Kapazitaet
 - 22/22 IPC-Tests (12 Basis + 10 Capability-Gating) + 28/28 bestehende = 50/50 gesamt gruen
 - Security-Fix: recv() prueft Capability VOR Buffer-Inspektion (verhindert Info-Lecks)
+
+## K-Sprint 6: DID + Remote-Capability-Tickets (03.08.2026)
+
+`kernel/src/did.rs` — Dezentrale Knoten-Identitaet:
+- `Did` — did:shivacore:<public-key> Format
+- `CryptoProvider` Trait — abstrahierte Kryptografie (Ed25519 oder Hardware-Enklave)
+- `SoftwareSigner` — deterministischer Software-Signer fuer Tests
+- Sign/Verify mit trait-basierter Abstraktion
+
+`kernel/src/remote_caps.rs` — Remote-Capability-Tickets (RCT):
+- `RemoteCapabilityTicket` — kryptographisch signierte Delegation
+- `issue_ticket()` — Issuer signiert Ticket fuer Subject
+- `RemoteCapabilityResolver` — validiert Signatur, Subject, Replay, Deadline, Constraints
+- `resolve_chain()` — mehrstufige Delegation mit Attenuation-Pruefung
+- `LocalCap` — lokale Capability mit Verbrauchszaehler (max_operations)
+- `NonceStore` — Replay-Schutz (BTreeSet)
+- 22/22 Tests (6 DID + 16 RCT) + 50/50 bestehende = 72/72 gesamt gruen
