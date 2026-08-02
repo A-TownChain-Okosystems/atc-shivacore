@@ -21,6 +21,7 @@ mod interrupts;
 mod memory;
 mod serial;
 mod capability;
+mod process;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
