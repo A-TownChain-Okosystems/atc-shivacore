@@ -159,3 +159,16 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - Thermisches Throttling: ueberhitzte Beschleuniger werden uebersprungen
 - Speicher-Constraint: Beschleuniger ohne ausreichenden Speicher wird uebersprungen
 - 10/10 neue Scheduler-Tests + 18/18 bestehende = 28/28 gesamt gruen
+
+## K-Sprint 5: Inter-Process Communication (03.08.2026)
+
+`kernel/src/ipc.rs` — Channel-basierte IPC mit Capability-Durchsetzung.
+
+- `IpcSubsystem` — verwaltet alle Channels, erzeugt Channel mit auto-Caps
+- `create_channel()` — Owner bekommt WRITE+READ+DELEGATE Capabilities automatisch
+- `send()` / `recv()` — Capability-gegated (WRITE zum Senden, READ zum Empfangen)
+- `grant_access()` — Delegation von Channel-Rechten an andere Prozesse (Attenuation)
+- `close_channel()` — schliesst Channel + kaskadierender Capability-Widerruf
+- `close_all_for()` — schliesst alle Channels eines Prozesses (fuer kill())
+- FIFO-Buffer mit konfigurierbarer Kapazitaet
+- 12/12 neue IPC-Tests + 28/28 bestehende = 40/40 gesamt gruen
