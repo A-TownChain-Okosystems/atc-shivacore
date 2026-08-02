@@ -23,6 +23,7 @@ mod serial;
 mod capability;
 mod process;
 mod scheduler;
+mod ipc;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
