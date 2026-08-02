@@ -135,13 +135,14 @@ impl IpcSubsystem {
         if channel.closed {
             return Err(IpcError::ChannelClosed);
         }
-        if channel.buffer.is_empty() {
-            return Err(IpcError::ChannelEmpty);
-        }
 
-        // Capability-Check: Empfaenger muss READ haben
+        // Capability-Check VOR Buffer-Inspektion (Security: keine Info-Lecks an Unbefugte)
         if !caps.check(receiver, ResourceType::IpcChannel, channel_id.0, Rights::READ) {
             return Err(IpcError::NoReadCapability);
+        }
+
+        if channel.buffer.is_empty() {
+            return Err(IpcError::ChannelEmpty);
         }
 
         Ok(channel.buffer.remove(0)) // FIFO
@@ -397,4 +398,203 @@ mod tests {
         ipc.recv(&caps, pid(1), ch).unwrap();
         assert_eq!(ipc.pending_messages(ch), Some(0));
     }
+
+    // --- Capability-Gating Edge Cases ---
+
+    #[test]
+    fn test_revoked_cap_blocks_send() {
+        // Wenn eine Capability widerrufen wird, kann der Prozess nicht mehr senden
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch = ipc.create_channel(&mut caps, pid(1), 16);
+        ipc.grant_access(&mut caps, pid(1), ch, pid(2), Rights::WRITE | Rights::DELEGATE).unwrap();
+
+        // pid(2) kann zunaechst senden
+        assert!(ipc.send(&caps, pid(2), ch, b"first".to_vec()).is_ok());
+
+        // Widerrufe pid(2)s WRITE-Cap
+        let p2_caps: Vec<CapId> = caps.list_for(pid(2)).into_iter()
+            .filter(|c| c.resource_type == ResourceType::IpcChannel && c.resource_id == ch.0)
+            .map(|c| c.id)
+            .collect();
+        for cap_id in p2_caps {
+            caps.revoke(cap_id);
+        }
+
+        // pid(2) kann nicht mehr senden
+        let result = ipc.send(&caps, pid(2), ch, b"blocked".to_vec());
+        assert_eq!(result, Err(IpcError::NoWriteCapability));
+    }
+
+    #[test]
+    fn test_revoked_cap_blocks_recv() {
+        // Wenn READ-Cap widerrufen wird, kann der Prozess nicht mehr empfangen
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch = ipc.create_channel(&mut caps, pid(1), 16);
+        ipc.grant_access(&mut caps, pid(1), ch, pid(3), Rights::READ).unwrap();
+
+        // Message ablegen
+        ipc.send(&caps, pid(1), ch, b"msg".to_vec()).unwrap();
+
+        // pid(3) kann empfangen
+        assert!(ipc.recv(&caps, pid(3), ch).is_ok());
+
+        // Weitere Message + READ-Cap widerrufen
+        ipc.send(&caps, pid(1), ch, b"msg2".to_vec()).unwrap();
+        let p3_caps: Vec<CapId> = caps.list_for(pid(3)).into_iter()
+            .filter(|c| c.resource_type == ResourceType::IpcChannel && c.resource_id == ch.0)
+            .map(|c| c.id)
+            .collect();
+        for cap_id in p3_caps {
+            caps.revoke(cap_id);
+        }
+
+        // pid(3) kann nicht mehr empfangen
+        let result = ipc.recv(&caps, pid(3), ch);
+        assert_eq!(result, Err(IpcError::NoReadCapability));
+    }
+
+    #[test]
+    fn test_attenuated_cap_cannot_exceed_original() {
+        // Owner delegiert nur READ — Target kann nicht WRITE erlangen
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch = ipc.create_channel(&mut caps, pid(1), 16);
+
+        // pid(1) delegiert nur READ an pid(2)
+        ipc.grant_access(&mut caps, pid(1), ch, pid(2), Rights::READ).unwrap();
+
+        // pid(2) kann empfangen aber nicht senden
+        ipc.send(&caps, pid(1), ch, b"data".to_vec()).unwrap();
+        assert!(ipc.recv(&caps, pid(2), ch).is_ok());
+        assert_eq!(ipc.send(&caps, pid(2), ch, b"hack".to_vec()), Err(IpcError::NoWriteCapability));
+    }
+
+    #[test]
+    fn test_delegation_chain_capability_gating() {
+        // Alice -> Bob (WRITE+DELEGATE) -> Charlie (WRITE only)
+        // Charlie kann senden, Bob kann senden, aber Charlie kann nicht weiter delegieren
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch = ipc.create_channel(&mut caps, pid(1), 16); // Alice
+
+        // Alice delegiert WRITE+DELEGATE an Bob
+        let bob_cap = ipc.grant_access(&mut caps, pid(1), ch, pid(2),
+            Rights::WRITE | Rights::DELEGATE).unwrap();
+
+        // Bob delegiert nur WRITE an Charlie (Attenuation)
+        let charlie_cap = caps.delegate(pid(2), bob_cap, pid(3), Rights::WRITE).unwrap();
+
+        // Charlie kann senden
+        assert!(ipc.send(&caps, pid(3), ch, b"from charlie".to_vec()).is_ok());
+
+        // Charlie kann aber nicht weiter delegieren (kein DELEGATE-Recht)
+        let result = caps.delegate(pid(3), charlie_cap, pid(4), Rights::WRITE);
+        assert_eq!(result, Err(CapabilityError::NoDelegateRight));
+    }
+
+    #[test]
+    fn test_close_channel_revokes_all_delegated_caps() {
+        // Channel schliessen widerruft alle Caps — auch delegierte an andere Prozesse
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch = ipc.create_channel(&mut caps, pid(1), 16);
+        ipc.grant_access(&mut caps, pid(1), ch, pid(2), Rights::WRITE | Rights::DELEGATE).unwrap();
+        ipc.grant_access(&mut caps, pid(1), ch, pid(3), Rights::READ).unwrap();
+
+        // Bevor schliessen: alle koennen zugreifen
+        assert!(caps.check(pid(1), ResourceType::IpcChannel, ch.0, Rights::WRITE));
+        assert!(caps.check(pid(2), ResourceType::IpcChannel, ch.0, Rights::WRITE));
+        assert!(caps.check(pid(3), ResourceType::IpcChannel, ch.0, Rights::READ));
+
+        // Channel schliessen
+        ipc.close_channel(&mut caps, pid(1), ch);
+
+        // Nach schliessen: niemand hat noch Caps fuer diesen Channel
+        assert!(!caps.check(pid(1), ResourceType::IpcChannel, ch.0, Rights::WRITE));
+        assert!(!caps.check(pid(2), ResourceType::IpcChannel, ch.0, Rights::WRITE));
+        assert!(!caps.check(pid(3), ResourceType::IpcChannel, ch.0, Rights::READ));
+    }
+
+    #[test]
+    fn test_isolated_channels_capability_gating() {
+        // Prozesse koennen nur auf Channels zugreifen fuer die sie Caps haben
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch1 = ipc.create_channel(&mut caps, pid(1), 16);
+        let ch2 = ipc.create_channel(&mut caps, pid(2), 16);
+
+        // pid(1) kann auf ch1 senden aber nicht auf ch2
+        assert!(ipc.send(&caps, pid(1), ch1, b"ok".to_vec()).is_ok());
+        assert_eq!(ipc.send(&caps, pid(1), ch2, b"no".to_vec()), Err(IpcError::NoWriteCapability));
+
+        // pid(2) kann auf ch2 senden aber nicht auf ch1
+        assert!(ipc.send(&caps, pid(2), ch2, b"ok".to_vec()).is_ok());
+        assert_eq!(ipc.send(&caps, pid(2), ch1, b"no".to_vec()), Err(IpcError::NoWriteCapability));
+    }
+
+    #[test]
+    fn test_grant_then_revoke_blocks_access() {
+        // Grant access, dann widerruf, Zugriff sollte blockiert sein
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch = ipc.create_channel(&mut caps, pid(1), 16);
+
+        // Grant WRITE an pid(2)
+        let cap = ipc.grant_access(&mut caps, pid(1), ch, pid(2), Rights::WRITE).unwrap();
+        assert!(ipc.send(&caps, pid(2), ch, b"ok".to_vec()).is_ok());
+
+        // Widerrufe die spezifische Cap
+        caps.revoke(cap);
+        assert_eq!(ipc.send(&caps, pid(2), ch, b"blocked".to_vec()), Err(IpcError::NoWriteCapability));
+    }
+
+    #[test]
+    fn test_cross_channel_capability_isolation() {
+        // Caps fuer Channel A geben keinen Zugriff auf Channel B
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let ch_a = ipc.create_channel(&mut caps, pid(1), 16);
+        let ch_b = ipc.create_channel(&mut caps, pid(1), 16);
+
+        // Grant WRITE auf ch_a an pid(2)
+        ipc.grant_access(&mut caps, pid(1), ch_a, pid(2), Rights::WRITE).unwrap();
+
+        // pid(2) kann auf ch_a senden
+        assert!(ipc.send(&caps, pid(2), ch_a, b"a".to_vec()).is_ok());
+
+        // pid(2) kann NICHT auf ch_b senden (keine Cap)
+        assert_eq!(ipc.send(&caps, pid(2), ch_b, b"b".to_vec()), Err(IpcError::NoWriteCapability));
+
+        // pid(2) kann auch nicht von ch_b empfangen
+        assert_eq!(ipc.recv(&caps, pid(2), ch_b), Err(IpcError::NoReadCapability));
+    }
+
+    #[test]
+    fn test_send_to_nonexistent_channel() {
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let result = ipc.send(&caps, pid(1), ChannelId(999), b"x".to_vec());
+        assert_eq!(result, Err(IpcError::ChannelNotFound));
+    }
+
+    #[test]
+    fn test_recv_from_nonexistent_channel() {
+        let mut caps = CapabilityTable::new();
+        let mut ipc = IpcSubsystem::new();
+
+        let result = ipc.recv(&caps, pid(1), ChannelId(999));
+        assert_eq!(result, Err(IpcError::ChannelNotFound));
+    }
+
 }
