@@ -147,3 +147,15 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - `wait()` — Exit-Code-Abfrage
 - Zustandsautomaten: Ready↔Running, →Blocked→Ready (Preemption/Block)
 - 10/10 neue Tests + 8/8 Capability-Tests = 18/18 gesamt gruen
+
+## K-Sprint 4: DA-HEFT Scheduler (03.08.2026)
+
+`kernel/src/scheduler.rs` — Deadline-Aware Heterogeneous Earliest-Finish-Time in Rust.
+
+- `Accelerator` Trait — Hardware-Abstraktion (CPU/GPU/NPU/TPU), austauschbar fuer echte Hardware
+- `SimulatedAccelerator` — fuer Tests und Software-Validierung
+- Upward-Rank (HEFT): iterativ aus Successor-Map berechnet, Entry-Tasks zuerst
+- Deadline-Aware: Tasks die ihre Deadline verfehlen werden markiert
+- Thermisches Throttling: ueberhitzte Beschleuniger werden uebersprungen
+- Speicher-Constraint: Beschleuniger ohne ausreichenden Speicher wird uebersprungen
+- 10/10 neue Scheduler-Tests + 18/18 bestehende = 28/28 gesamt gruen
