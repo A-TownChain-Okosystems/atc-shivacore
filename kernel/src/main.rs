@@ -40,6 +40,7 @@ mod mempool;
 mod blockchain;
 mod vm;
 mod contract;
+mod ai;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
