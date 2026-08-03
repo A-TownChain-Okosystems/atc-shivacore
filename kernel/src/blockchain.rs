@@ -21,3 +21,37 @@ pub fn vote_on_block(&self,block_hash:[u8;32],timestamp:u64,approve:bool,signatu
 pub fn cleanup_mempool(&self,now:u64)->usize{self.mempool.cleanup(now)} pub fn chain(&self)->&Arc<BlockChain>{&self.chain} pub fn mempool(&self)->&Arc<crate::mempool::MemoryPool>{&self.mempool} pub fn consensus(&self)->&Arc<ConsensusEngine>{&self.consensus} pub fn state(&self)->&Arc<crate::mempool::StateDb>{&self.state} pub fn current_height(&self)->u64{*self.block_height.lock()}}
 }
 #[derive(Debug,Clone,PartialEq,Eq)] pub enum PipelineError{NoPendingTxs,AllTxsInvalid,NoGenesis,InvalidHeight,ParentNotFound,BlockExists,DuplicateBlock,GenesisExists,DagInsertFailed}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mempool::{NonceTracker, MemoryPool, TxType};
+    use crate::consensus::ConsensusEngine;
+    fn setup() -> ProposalPipeline {
+        let state = Arc::new(crate::mempool::StateDb::new());
+        let nonces = Arc::new(NonceTracker::new());
+        let mp = Arc::new(MemoryPool::new(1000, 300));
+        let val = Arc::new(crate::mempool::TxValidator::new(state.clone(), nonces, 1));
+        let con = Arc::new(ConsensusEngine::new("did:p".into(), [0x42; 32]));
+        let ch = Arc::new(BlockChain::new());
+        state.deposit("did:alice", 100_000_000); state.deposit("did:bob", 100_000_000);
+        ProposalPipeline::new(mp, val, con, ch, state, "did:p".into())
+    }
+    fn mk_tx(s: &str, r: &str, a: u64, n: u64) -> Transaction {
+        Transaction::new(TxType::Transfer, s.into(), Some(r.into()), a, 10, 50000, n, 1000, vec![], [0u8;64], [0x42;32])
+    }
+    #[test] fn test_block_create() { let b = Block::new(1, [0xAA;32], "p".into(), 1000, [0xBB;32], vec![], [0;64]); assert_eq!(b.height, 1); assert!(b.is_empty()); assert_eq!(b.gas_used, 0); }
+    #[test] fn test_block_with_txs() { let t = vec![mk_tx("a","b",100,0)]; let b = Block::new(1, [0;32], "p".into(), 1000, [0;32], t, [0;64]); assert_eq!(b.tx_count(), 1); assert_eq!(b.gas_used, 1000); }
+    #[test] fn test_block_det_id() { let t = vec![mk_tx("a","b",100,0)]; let b1 = Block::new(1,[0xAA;32],"p".into(),1000,[0xBB;32],t.clone(),[0;64]); let b2 = Block::new(1,[0xAA;32],"p".into(),1000,[0xBB;32],t,[0;64]); assert_eq!(b1.id, b2.id); }
+    #[test] fn test_chain_genesis() { let c = BlockChain::new(); c.add_genesis(Block::new(0,[0;32],"p".into(),1000,[0;32],vec![],[0;64])).unwrap(); assert_eq!(c.block_count(), 1); assert_eq!(c.current_height(), 0); }
+    #[test] fn test_chain_genesis_dup() { let c = BlockChain::new(); c.add_genesis(Block::new(0,[0;32],"p".into(),1000,[0;32],vec![],[0;64])).unwrap(); assert_eq!(c.add_genesis(Block::new(0,[0;32],"p".into(),2000,[0;32],vec![],[0;64])), Err(PipelineError::GenesisExists)); }
+    #[test] fn test_chain_add_blocks() { let c = BlockChain::new(); let g = Block::new(0,[0;32],"p".into(),1000,[0;32],vec![],[0;64]); c.add_genesis(g.clone()).unwrap(); let b1 = Block::new(1,g.id,"p".into(),2000,[0;32],vec![],[0;64]); c.add_block(b1).unwrap(); assert_eq!(c.current_height(), 1); }
+    #[test] fn test_chain_bad_height() { let c = BlockChain::new(); c.add_genesis(Block::new(0,[0;32],"p".into(),1000,[0;32],vec![],[0;64])).unwrap(); assert_eq!(c.add_block(Block::new(5,[0;32],"p".into(),2000,[0;32],vec![],[0;64])), Err(PipelineError::InvalidHeight)); }
+    #[test] fn test_chain_get_by_hash() { let c = BlockChain::new(); let g = Block::new(0,[0;32],"p".into(),1000,[0;32],vec![],[0;64]); let h = g.id; c.add_genesis(g).unwrap(); assert!(c.get_by_hash(&h).is_some()); }
+    #[test] fn test_pipeline_genesis() { let p = setup(); let g = p.create_genesis(1000).unwrap(); assert_eq!(g.height, 0); assert_eq!(p.current_height(), 0); }
+    #[test] fn test_pipeline_no_pending() { let p = setup(); p.create_genesis(1000).unwrap(); assert_eq!(p.propose_block(10, 2000), Err(PipelineError::NoPendingTxs)); }
+    #[test] fn test_pipeline_propose() { let p = setup(); p.create_genesis(1000).unwrap(); let t = mk_tx("did:alice","did:bob",1000,0); p.mempool().add(t, 1000).unwrap(); for e in &p.mempool().get_pending_batch(10) { p.mempool().validate_tx(&e.id, 1000).unwrap(); } let b = p.propose_block(10, 2000).unwrap(); assert_eq!(b.height, 1); assert_eq!(b.tx_count(), 1); }
+    #[test] fn test_pipeline_multi_blocks() { let p = setup(); p.create_genesis(1000).unwrap(); for i in 0..2 { let t = mk_tx("did:alice","did:bob",100*(i+1),i); p.mempool().add(t, 1000).unwrap(); for e in &p.mempool().get_pending_batch(10) { p.mempool().validate_tx(&e.id, 1000).unwrap(); } p.propose_block(10, 2000+i as u64).unwrap(); } assert_eq!(p.current_height(), 2); assert_eq!(p.chain().block_count(), 3); }
+    #[test] fn test_pipeline_state() { let p = setup(); p.create_genesis(1000).unwrap(); let before = p.state().get_balance("did:alice"); let t = mk_tx("did:alice","did:bob",5000,0); p.mempool().add(t, 1000).unwrap(); for e in &p.mempool().get_pending_batch(10) { p.mempool().validate_tx(&e.id, 1000).unwrap(); } p.propose_block(10, 2000).unwrap(); assert!(p.state().get_balance("did:alice") < before); assert!(p.state().get_balance("did:bob") > 100_000_000); }
+    #[test] fn test_pipeline_dag() { let p = setup(); p.create_genesis(1000).unwrap(); assert!(p.consensus().dag().vertex_count() >= 1); let t = mk_tx("did:alice","did:bob",1000,0); p.mempool().add(t, 1000).unwrap(); for e in &p.mempool().get_pending_batch(10) { p.mempool().validate_tx(&e.id, 1000).unwrap(); } p.propose_block(10, 2000).unwrap(); assert!(p.consensus().dag().vertex_count() >= 2); }
+    #[test] fn test_block_merkle_diff() { let b1 = Block::new(1,[0;32],"p".into(),1000,[0;32],vec![mk_tx("a","b",100,0)],[0;64]); let b2 = Block::new(1,[0;32],"p".into(),1000,[0;32],vec![mk_tx("a","b",200,0)],[0;64]); assert_ne!(b1.tx_root, b2.tx_root); assert_ne!(b1.id, b2.id); }
+}
