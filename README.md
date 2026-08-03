@@ -250,3 +250,33 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - 22/22 neue VFS-Tests + 99/99 bestehende = 121/121 gesamt gruen
 
 **Nächster Schritt:** K-Sprint 9 — Device-Driver-Framework oder Netzwerk-Stack.
+
+## K-Sprint 9: Syscall Interface (ATC-96) (03.08.2026)
+
+`kernel/src/syscall.rs` — Einheitlicher Dispatch-Layer fuer alle Kernel-Subsysteme.
+
+- `SyscallDispatcher` — zentrale Dispatch-Funktion, leitet Syscalls an Subsysteme weiter
+- 33 Syscalls definiert (ATC-96-konform): Prozess (spawn/kill/wait), VFS (open/read/write/
+  close/seek/mkdir/rmdir/listdir/stat/create_file/remove_file/symlink/readlink),
+  IPC (create/send/recv/grant/close), Capability (create/delegate/check/revoke),
+  Scheduler (yield/info), Knowledge Graph (query/create_entity/add_triple),
+  Memory (alloc/free/memcpy)
+- `Context` — drei Ausfuehrungs-Contexte: Node (vollzugriff), Contract (nur alloc/free,
+  keine I/O), Test (alle mit Mocks) — ATC-96 Abschnitt 3 konform
+- Gas-Tracking — jeder Syscall hat definierte Gas-Kosten (ATC-96 Abschnitt 4),
+  Dispatcher verbraucht Gas und blockiert bei OutOfGas
+- `SyscallArg` — typisierte Argumente (U64, String, Bytes)
+- `SyscallResult` — Success(u64), SuccessString, SuccessList, Ok, Error
+- `SyscallError` — PermissionDenied, OutOfGas, InvalidArgument, NotFound,
+  AlreadyExists, CapabilityDenied, VfsError, ProcessError, IpcError, UnknownSyscall
+- Capability-Gating: jeder Syscall prueft READ/WRITE/EXEC/DELEGATE vor Ausfuehrung
+- 22/22 neue Syscall-Tests + 121/121 bestehende = 143/143 gesamt gruen
+
+**Architektonische Bedeutung:** Mit K9 sind alle Kernel-Subsysteme (K3-K8) erstmals
+ueber eine einheitliche, getestete Schnittstelle erreichbar. Das ist die
+Voraussetzung fuer Userspace-Prozesse (Ring-3) und echtes Multitasking — der
+Kernel ist jetzt ein echtes OS, das Prozesse bedient, nicht nur eine Sammlung
+von Modulen.
+
+**Naechster Schritt:** K-Sprint 10 — Block-Device-Layer (virtio-blk fuer QEMU)
+oder Timer/Clock-Subsystem (Praezision fuer Scheduler).
