@@ -421,3 +421,38 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
    - Verbindet Multi-Sig + Audit + Reputation + Rate-Limit + Channels
 
 - 28/28 neue Security-Tests + 250/250 bestehende = 278/278 gesamt gruen
+
+## K-Sprint 16: Konsens-Mechanismus (03.08.2026)
+
+`kernel/src/consensus.rs` — DAG Consensus (ATC-04), Proof of History, Validator-Voting.
+
+1. **Proof of History (PoH)** — `PohSequence`
+   - Sequenzielle Hash-Kette für Zeitordnung (Solana-ähnlich)
+   - `tick()` erzeugt Zeit-Tick, `record()` verknüpft Event-Hash
+   - `verify()` revalidiert gesamte PoH-Kette ab Start-Hash
+
+2. **DAG-Struktur (ATC-04)** — `Dag` + `DagVertex`
+   - Vertices mit Mehrfach-Parents (parallele Transaktionen, kein Chain-Flaschenhals)
+   - `add_vertex()` mit Parent-Existenz-Prüfung
+   - `get_tips()` — unbestätigte Spitzen, `get_children()`, `topological_order()`
+   - `tips_hash()` — Checkpoint-Hash über alle Tips
+   - `confirm_vertex()` bei Finalität
+
+3. **Validator-Registry** — `ValidatorRegistry` + `Validator`
+   - Stake-basierte Registrierung, `select_proposer()` (weighted by stake)
+   - `record_vote()` / `record_proposal()` — Stat-Tracking
+   - `deactivate()` — Validator can be removed from consensus
+
+4. **Vote-Pool & Finality** — `VotePool` + `Vote`
+   - Stake-weighted 2/3 Supermajority für Finalität (configurable threshold)
+   - `cast_vote()`, `is_final()`, `approve_count()` / `reject_count()`
+   - `finalized_vertices()` — alle finalen Vertices
+
+5. **Consensus-Engine** — `ConsensusEngine`
+   - `init_genesis()` — DAG mit Genesis-Vertex initialisieren
+   - `propose_vertex()` — neuen Vertex an Tips anhängen (PoH + Parents)
+   - `vote()` / `handle_vote()` — abstimmen + automatische Bestätigung bei Finalität
+   - `fork_choice()` — schwerester Pfad ab Genesis (meiste Votes)
+   - `next_proposer()` — Stake-weighted Proposer-Selection via PoH-Hash
+
+- 24/24 neue Konsens-Tests + 278/278 bestehende = 302/302 gesamt gruen
