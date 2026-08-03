@@ -36,6 +36,7 @@ mod tcpip;
 mod p2p;
 mod security;
 mod consensus;
+mod mempool;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
