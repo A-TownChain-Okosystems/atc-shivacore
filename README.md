@@ -513,3 +513,26 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
   - `cleanup_mempool()` — entfernt bestätigte Txs
 - Volle Pipeline: Mempool (K17) → Block → Chain → DAG (K16) → Voting → Finality
 - 20/20 neue Pipeline-Tests + 332/332 bestehende = 352/352 gesamt gruen
+
+## K-Sprint 19: Contract VM / ShivaVM (03.08.2026)
+
+`kernel/src/vm.rs` — Bytecode-Interpreter für Smart Contracts.
+
+- **27 Opcodes**: Nop, Push, Pop, Add, Sub, Mul, Div, Mod, Eq, Ne, Lt, Gt, Lte, Gte,
+  And, Or, Not, Jump, JumpIf, JumpIfNot, Call, Ret, Load, Store, Log, Self, Caller,
+  Balance, Transfer, Halt
+- **ShivaVM** — Stack-basierter Bytecode-Interpreter
+  - 1024-Element Stack, Program Counter, Gas-Metering
+  - `execute()` — interpretiert Bytecode Opcode für Opcode
+  - `consume_gas()` — pro-Opcode Gas-Kosten, OutOfGas-Abort
+  - `ExecResult` — success, return_value, gas_used, gas_refund, logs, storage_changes
+- **ContractStorage** — Key-Value Store pro Contract (contract_addr, key) → value
+  - `load()` / `store()` — persistent über Calls hinweg
+  - `clear_contract()` — für Self-Destruct
+- **ContractRegistry** — verwaltet deployte Contracts
+  - `deploy()` / `get()` / `exists()` / `count()`
+  - `deposit()` / `withdraw()` / `balance()` — Contract-Balances
+- **VmEngine** — Top-Level Integration
+  - `deploy()` — Contract deployen (Bytecode + Owner-DID)
+  - `call()` — Contract aufrufen (erzeugt ShivaVM, executes, returns ExecResult)
+- 30/30 neue VM-Tests + 352/352 bestehende = 382/382 gesamt gruen
