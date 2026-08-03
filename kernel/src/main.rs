@@ -33,6 +33,7 @@ mod timer;
 mod block;
 mod net;
 mod tcpip;
+mod p2p;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
