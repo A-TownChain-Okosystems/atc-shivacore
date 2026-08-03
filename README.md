@@ -536,3 +536,22 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
   - `deploy()` — Contract deployen (Bytecode + Owner-DID)
   - `call()` — Contract aufrufen (erzeugt ShivaVM, executes, returns ExecResult)
 - 30/30 neue VM-Tests + 352/352 bestehende = 382/382 gesamt gruen
+
+## K-Sprint 20: Contract-Call-Integration (03.08.2026)
+
+`kernel/src/contract.rs` — Verbindet ShivaVM (K19) mit Block-Pipeline (K18).
+
+- `ContractExecutor` — verarbeitet Contract-Transaktionen
+  - `process_deploy()` — ContractDeploy-Tx → Bytecode extrahieren → VmEngine.deploy()
+    - Contract-Adresse = hash(sender_did + nonce + poh_hash) → `did:contract:<hex>`
+    - Deterministisch: gleiche Sender+Nonce → gleiche Adresse
+  - `process_call()` — ContractCall-Tx → Contract-Adresse extrahieren → VmEngine.call()
+    - Gas-Limit aus Transaction, Caller-DID weitergereicht
+    - ExecResult (return_value, gas_used, logs, storage_changes)
+  - `process_tx()` — Dispatch je nach TxType (Deploy/Call/Other)
+- Payload-Format:
+  - Deploy: `[bytecode_len(4)] [bytecode]`
+  - Call: `[contract_addr_len(2)] [contract_addr] [call_data...]`
+- `build_deploy_payload()` / `build_call_payload()` — Hilfsfunktionen
+- Full Workflow: Deploy (Init) → Call (Increment) → State persists across calls
+- 17/17 neue Contract-Tests + 382/382 bestehende = 399/399 gesamt gruen
