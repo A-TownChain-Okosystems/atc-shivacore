@@ -39,6 +39,7 @@ mod consensus;
 mod mempool;
 mod blockchain;
 mod vm;
+mod contract;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
