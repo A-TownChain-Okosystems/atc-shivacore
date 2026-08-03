@@ -342,3 +342,20 @@ Knowledge Graph, VFS, Syscalls, Timer/Clock, Block-Storage und Netzwerk.
 Was noch fehlt: TCP/IP-Layer (auf K12 aufbauend), Userspace/Ring-3, und
 echte Hardware-Treiber (HPET, virtio-blk, virtio-net) — aber die abstrakten
 Schnittstellen sind alle definiert und getestet.
+
+## K-Sprint 13: TCP/IP-Layer (03.08.2026)
+
+`kernel/src/tcpip.rs` — IPv4, UDP, TCP, Routing, Sockets.
+
+- `Ipv4Packet` — IPv4 mit Header-Checksumme, serialize/deserialize, with_checksum()
+- `UdpPacket` — UDP, 8-Byte Header, serialize/deserialize
+- `TcpSegment` — TCP mit Flags (SYN/ACK/FIN/RST/PSH/URG), serialize/deserialize
+- `RoutingTable` — Longest Prefix Match, Default-Route, metric-basierte Sortierung
+- `SocketManager` — UDP und TCP Sockets
+  - UDP: bind/connect/send/recv/close, handle_udp() fuer eingehende Packets
+  - TCP: bind/connect, State Machine (Listen→SynReceived→Established→CloseWait→Closed)
+  - handle_tcp() — verarbeitet SYN/SYN-ACK/FIN, empfaengt Daten
+- `IpStack` — verbindet NetworkStack + Routing + Sockets
+  - handle_ipv4() — dispatcht UDP/TCP an SocketManager
+  - handle_frame() — verarbeitet Ethernet→IPv4→UDP/TCP Stack
+- 22/22 neue TCP/IP-Tests + 203/203 bestehende = 225/225 gesamt gruen
