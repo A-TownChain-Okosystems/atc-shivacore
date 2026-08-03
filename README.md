@@ -230,3 +230,23 @@ in Doku/Kommunikation nach außen konsistent halten, keine Überverkaufs-Sprache
 - `transitive_closure()` — Pfadsuche ueber mehrere Hops mit max_depth + Zyklus-Schutz (visited-Set)
 - `grant_read()` — Delegation von Lesezugriff an andere Prozesse
 - 18/18 neue Tests + 81/81 bestehende = 99/99 gesamt gruen
+
+## K-Sprint 8: Virtual File System (VFS) (03.08.2026)
+
+`kernel/src/vfs.rs` — Capability-gegates VFS mit In-Memory-Backend.
+
+- `Vfs` — zentrale VFS-Instanz, verwaltet Inodes, File-Handles, Pfad-Auflösung
+- `Inode` — eindeutige ID, Name, Typ (File/Directory/Symlink), Parent/Children, Daten
+- `FileHandle` — File-Deskriptor mit Position, Mode (Read/Write/ReadWrite/Append/Create), PID
+- Verzeichnis-Operationen: `mkdir()`, `list_dir()`, `rmdir()` (nur wenn leer, Root geschützt)
+- Datei-Operationen: `create_file()`, `open()`, `read()`, `write()`, `close()`, `seek()`
+- `OpenMode` — Read, Write, ReadWrite, Append, Create
+- Symlink-Unterstützung: `create_symlink()`, `read_symlink()`
+- Pfad-Normalisierung: `..` und `.` werden korrekt aufgelöst
+- `stat()` — Metadaten (Typ, Größe, Owner, Permissions, Zeitstempel)
+- `remove_file()` — schließt offene Handles automatisch vor Löschung
+- `tree()` — Debug-Baum-Anzeige des gesamten VFS
+- Capability-Gating: alle Operationen prüfen READ/WRITE-Rechte
+- 22/22 neue VFS-Tests + 99/99 bestehende = 121/121 gesamt gruen
+
+**Nächster Schritt:** K-Sprint 9 — Device-Driver-Framework oder Netzwerk-Stack.
