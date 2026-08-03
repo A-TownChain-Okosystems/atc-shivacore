@@ -464,3 +464,31 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
    - `next_proposer()` — Stake-weighted Proposer-Selection via PoH-Hash
 
 - 24/24 neue Konsens-Tests + 278/278 bestehende = 302/302 gesamt gruen
+
+## K-Sprint 17: Memory-Pool & Transaction-Validation (03.08.2026)
+
+`kernel/src/mempool.rs` — Mempool, Tx-Validator, Nonce-Tracking, State-DB.
+
+- `Transaction` — 7 Tx-Types: Transfer, Stake, Unstake, Delegate, Vote, ContractCall, ContractDeploy
+  - `gas_cost()` — Base-Gas + Payload-Gas (10 gas/byte)
+  - `max_fee()` — gas_limit × gas_price
+  - `to_bytes()` — Serialisierung für P2P-Propagation
+- `MemoryPool` — verwaltet pendente Transaktionen
+  - `add()` — mit Pool-Full und Duplicate-Check
+  - `validate_tx()` — Gas-Limit, Recipient, Gas-Price Checks
+  - `get_pending_batch(max)` — höchsten priorisierten Txs (gas_price × gas_limit)
+  - `mark_in_dag()` / `mark_confirmed()` — Konsens-Integration
+  - `cleanup(now)` — entfernt bestätigte/abgelaufene Txs
+  - `txs_by_sender()` / `sender_nonce()` — per-Sender Tracking
+- `NonceTracker` — verhindert Replay-Angriffe
+  - `check_and_advance()` — Nonce muss sequenziell sein (0, 1, 2, ...)
+  - `expected_nonce()` / `reset()`
+- `StateDb` — vereinfachte Account-State-Datenbank
+  - Balance, Staked, Nonce pro DID
+  - `deposit()` / `withdraw()` / `stake()` / `unstake()`
+  - `increment_nonce()` / `total_supply()`
+- `TxValidator` — vollständige Transaktionsvalidierung
+  - Gas-Price-Check, Gas-Limit-Check, Nonce-Check, Balance-Check
+  - `validate()` — prüft alle Constraints vor Ausführung
+  - `apply()` — wendet valide Tx auf State an (Transfer/Stake/Unstake)
+- 30/30 neue Mempool-Tests + 302/302 bestehende = 332/332 gesamt gruen
