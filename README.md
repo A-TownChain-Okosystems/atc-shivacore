@@ -390,3 +390,34 @@ Schnittstellen sind alle definiert und getestet.
 im Kernel. P2P-Networking mit DID-basiertem Handshake, Gossip-Protocol und
 Chain-ID-Validierung — die Fundamente fuer Konsens und Block-Propagation.
 Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
+
+## K-Sprint 15: Security Layer (03.08.2026)
+
+`kernel/src/security.rs` — Multi-Sig, Audit-Log, Reputation, Rate-Limiting, Secure-Channel.
+
+1. **Multi-Signature Auth (ATC-18)** — `MultiSigManager` + `MultiSigProposal`
+   - m-of-n Signatursammlung, Duplicate-Signer-Check, `is_ready()`, `execute()`
+   - Signatur mit (DID, Ed25519-Signatur) — verknüpft mit K6/K6b
+
+2. **Audit-Log (Tamper-Evident)** — Hash-Chain über alle Sicherheitseinträge
+   - `log()` — seq + timestamp + actor + action + resource + result → hash
+   - `verify_chain()` — revalidiert gesamte Hash-Kette
+   - `filter_by_actor()` / `filter_by_result()`
+
+3. **Peer-Reputation** — Score [-100..+100], automatischer Ban bei ≤ -50
+   - `reward()` / `penalize()` / `unban()`, `is_banned()`, `banned_count()`
+
+4. **Rate-Limiting (Token Bucket)** — pro-Peer Token-Bucket mit Refill
+   - `allow(peer_id, now)` — konsumiert 1 Token, blockiert bei leerem Bucket
+   - Zeitbasiertes Refill (tokens/sec)
+
+5. **Secure-Channel** — verschlüsselte Kommunikation zwischen Peers
+   - `establish()` / `send()` / `recv()` / `close()`
+   - XOR-basiert für Tests, ersetztbar durch AEAD (XChaCha20-Poly1305)
+
+6. **SecurityManager** — Top-Level Integration
+   - `check_peer()` — Reputation + Rate-Limit kombiniert
+   - `audit_log()` — zentrale Audit-Funktion
+   - Verbindet Multi-Sig + Audit + Reputation + Rate-Limit + Channels
+
+- 28/28 neue Security-Tests + 250/250 bestehende = 278/278 gesamt gruen
