@@ -359,3 +359,34 @@ Schnittstellen sind alle definiert und getestet.
   - handle_ipv4() — dispatcht UDP/TCP an SocketManager
   - handle_frame() — verarbeitet Ethernet→IPv4→UDP/TCP Stack
 - 22/22 neue TCP/IP-Tests + 203/203 bestehende = 225/225 gesamt gruen
+
+## K-Sprint 14: P2P-Consensus Foundation (03.08.2026)
+
+`kernel/src/p2p.rs` — Peer-to-Peer Networking auf TCP/IP, Chain-ID 9000.
+
+- `P2pMessage` — 9 Message-Types: Ping, Pong, Handshake, HandshakeAck,
+  BlockAnnounce, TxAnnounce, Vote, PeerList, Bye. Serialisierung mit
+  Chain-ID-Validierung (9000), DID-Feld, Timestamp.
+- `PeerTable` — verwaltet Peers (IP, Port, DID, Status, Stats)
+  - add/remove/find_by_addr, set_status/set_did/touch
+  - Stat-Tracking: bytes_sent/recv, messages_sent/recv
+  - max_peers-Limit, connected_count()
+- `GossipProtocol` — Broadcast und Direct-Send
+  - broadcast() — an alle verbundenen Peers
+  - send_to() — an einen spezifischen Peer
+  - handle_message() — verarbeitet Handshake/Bye, lernt DID
+  - Peer-Discovery: make_peer_list() / handle_peer_list()
+  - make_ping/pong/handshake() — Message-Factory
+- `P2pNode` — Top-Level-Integration
+  - connect_peer() — sendet Handshake
+  - handle_handshake() — verarbeitet eingehenden Handshake, lernt DID, sendet Ack
+  - ping_all() — Ping an alle Peers
+  - announce_block() / announce_tx() — Block/Transaktion propagieren
+  - disconnect_peer() — sauberer Disconnect mit Bye
+- Chain-ID 9000 (Non-EVM, SHA-256) validiert in jeder Message
+- 25/25 neue P2P-Tests + 225/225 bestehende = 250/250 gesamt gruen
+
+**Architektonische Bedeutung:** Das ist die erste Blockchain-native Komponente
+im Kernel. P2P-Networking mit DID-basiertem Handshake, Gossip-Protocol und
+Chain-ID-Validierung — die Fundamente fuer Konsens und Block-Propagation.
+Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
