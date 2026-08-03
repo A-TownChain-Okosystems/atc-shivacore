@@ -34,6 +34,7 @@ mod block;
 mod net;
 mod tcpip;
 mod p2p;
+mod security;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
