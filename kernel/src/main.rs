@@ -37,6 +37,7 @@ mod p2p;
 mod security;
 mod consensus;
 mod mempool;
+mod blockchain;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
