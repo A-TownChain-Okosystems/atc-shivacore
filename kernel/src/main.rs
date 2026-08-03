@@ -29,6 +29,9 @@ mod remote_caps;
 mod knowledge_graph;
 mod vfs;
 mod syscall;
+mod timer;
+mod block;
+mod net;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
