@@ -555,3 +555,46 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
 - `build_deploy_payload()` / `build_call_payload()` — Hilfsfunktionen
 - Full Workflow: Deploy (Init) → Call (Increment) → State persists across calls
 - 17/17 neue Contract-Tests + 382/382 bestehende = 399/399 gesamt gruen
+
+## K-Sprint 21: AI-Kernel-Subsystem / Aurora AI (03.08.2026)
+
+`kernel/src/ai.rs` — Native AI-Integration direkt im Kernel.
+
+- **Tensor** — n-dimensionaler Tensor mit Arithmetik und Aktivierungen
+  - `add()`, `mul()`, `scale()`, `matmul()`, `dot()`, `transpose()`
+  - `relu()`, `sigmoid()`, `softmax()`, `tanh`, `mean()`
+  - Dtypes: F64, F32, F16, I32, I8
+
+- **Neural Network Layer** — `Layer` mit Weights, Bias, Activation
+  - `forward()` — `activation(input @ weights + bias)`
+  - Activations: ReLU, Sigmoid, Tanh, Softmax, None
+
+- **Model** — Mehrschichtiges neuronales Netz
+  - `add_layer()` — Layer hinzufügen
+  - `forward()` — Forward-Pass durch alle Layer, Gas-Tracking
+  - `param_count()` — Anzahl Parameter
+
+- **ModelRegistry** — verwaltet alle KI-Modelle im Kernel
+  - `register()` / `get()` / `remove()` / `list()` / `run_inference()`
+
+- **AI-Capability** — verknüpft mit K3a (Capabilities)
+  - 6 Capabilities: Inference, Train, Deploy, Query, Delete, NeuralContext
+  - `AiCapabilityGuard` — Grant/Revoke/Check pro DID
+
+- **NeuralContextStore** — KI-Gedächtnis im Kernel
+  - Vektor-Embeddings speichern und abrufen
+  - `similarity_search()` — Cosine-Similarity Top-K Search
+  - Verknüpft mit Knowledge Graph (K7)
+
+- **LLM-Router** — vereinfachte LLM-Inference-Schnittstelle
+  - `LlmRequest` / `LlmResponse` mit Gas-Metering
+  - Default-Model-Selection, Token-Counting
+
+- **AiEngine** — Top-Level Integration
+  - `deploy_model()` — mit Capability-Check
+  - `infer()` — Tensor-Inference mit Gas-Budget
+  - `store_context()` — Neural Context speichern
+  - `llm_infer()` — LLM-Inference
+  - Full Workflow: Deploy → Inference → Context → Similarity → LLM
+
+- 42/42 neue AI-Tests + 399/399 bestehende = 441/441 gesamt gruen
