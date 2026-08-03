@@ -280,3 +280,65 @@ von Modulen.
 
 **Naechster Schritt:** K-Sprint 10 — Block-Device-Layer (virtio-blk fuer QEMU)
 oder Timer/Clock-Subsystem (Praezision fuer Scheduler).
+
+## K-Sprint 10: Timer/Clock-Subsystem (03.08.2026)
+
+`kernel/src/timer.rs` — Monotone Uhr, Deadline-Tracking, Sleep-Queue.
+
+- `TimerSource` Trait — Abstraktion für HPET/PIT/TSC (Hardware) oder Simulation
+- `SimulatedTimerSource` — RAM-basierte Zeitquelle für Tests, advance()/set()
+- `MonotonicClock` — uptime_ns/ms/secs, uptime_string(), kapselt TimerSource
+- `TimerManager` — Sleep-Queue mit Deadline-Sortierung (BTreeMap)
+- `TimerCallback` — Wakeup(pid), Periodic(interval_ns), Alarm (one-shot)
+- `sleep()` — registriert Prozess-Sleep mit Deadline
+- `schedule_periodic()` — periodischer Timer mit automatischem Re-Register
+- `schedule_alarm()` — einmaliger Alarm
+- `cancel()` — bricht Timer ab
+- `tick()` — prüft alle Deadlines, liefert fired events, re-registriert periodische
+- `next_deadline()` / `time_to_next_deadline()` — Scheduler-Integration
+- `duration` — Hilfsfunktionen (from_ms/secs/us/mins, to_ms/secs/us)
+- 20/20 neue Timer-Tests + 143/143 bestehende = 163/163 gesamt gruen
+
+## K-Sprint 11: Block-Device-Layer (03.08.2026)
+
+`kernel/src/block.rs` — Block-Storage-Abstraktion, Cache, MBR-Partitionen.
+
+- `BlockDevice` Trait — read_block/write_block, block_count, capacity, is_read_only
+- `SimulatedBlockDevice` — RAM-backed Block-Device für Tests (read-only mode supported)
+- `BlockBuffer` — LRU-Block-Cache mit Dirty-Tracking und Flush
+  - read() — Cache-Hit/Miss-Statistik, automatische Eviction bei vollem Cache
+  - write() — schreibt in Cache, markiert dirty
+  - flush() — schreibt alle dirty Blocks auf das Gerät
+  - clear() — flush + Cache leeren
+- `MBRPartitionTable` — MBR-Parsing (0x55AA-Signatur, 4 Partition-Einträge)
+  - PartitionEntry: bootable, type, start_lba, block_count
+- 18/18 neue Block-Tests + 163/163 bestehende = 181/181 gesamt gruen
+
+## K-Sprint 12: Netzwerk-Stack Foundation (03.08.2026)
+
+`kernel/src/net.rs` — Ethernet, ARP, NetworkDevice-Abstraktion.
+
+- `MacAddress` — 6-Byte, broadcast/zero, is_broadcast/is_zero, to_string
+- `Ipv4Address` — 4-Byte, broadcast/zero, is_broadcast/is_zero, to_string
+- `EthernetFrame` — dst/src/ethertype/payload, to_bytes/from_bytes
+  - ETH_TYPE_ARP (0x0806), ETH_TYPE_IPV4 (0x0800)
+- `ArpPacket` — ARP-Request/Reply, serialize/deserialize (28 Bytes)
+  - ARP_HW_ETHERNET, ARP_OP_REQUEST, ARP_OP_REPLY
+- `ArpTable` — IP→MAC Mapping mit Timeout und permanenten Einträgen
+  - lookup(), insert(), insert_permanent(), remove(), purge_expired()
+- `NetworkDevice` Trait — send_frame/recv_frame, mac_address, mtu, is_up, name
+- `LoopbackDevice` — RAM-basiertes Netzwerk-Device für Tests (Queue-basiert)
+- `NetworkStack` — verbindet Device + ARP
+  - arp_request() — sendet ARP-Request via Broadcast
+  - handle_frame() — verarbeitet empfangene Frames (ARP + IPv4)
+  - handle_arp() — lernt Sender-MAC, antwortet auf Requests an uns
+  - resolve_mac() — ARP-Cache-Lookup
+  - send_to() — sendet Frame an bekannte MAC
+- 22/22 neue Netzwerk-Tests + 181/181 bestehende = 203/203 gesamt gruen
+
+**Architektonische Bedeutung K10-K12:** Der Kernel hat jetzt alle Kernsubsysteme:
+Boot, Memory, Interrupts, Capabilities, Prozesse, Scheduler, IPC, DID/Crypto,
+Knowledge Graph, VFS, Syscalls, Timer/Clock, Block-Storage und Netzwerk.
+Was noch fehlt: TCP/IP-Layer (auf K12 aufbauend), Userspace/Ring-3, und
+echte Hardware-Treiber (HPET, virtio-blk, virtio-net) — aber die abstrakten
+Schnittstellen sind alle definiert und getestet.
