@@ -27,6 +27,7 @@ mod ipc;
 mod did;
 mod remote_caps;
 mod knowledge_graph;
+mod vfs;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
