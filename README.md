@@ -492,3 +492,24 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
   - `validate()` — prüft alle Constraints vor Ausführung
   - `apply()` — wendet valide Tx auf State an (Transfer/Stake/Unstake)
 - 30/30 neue Mempool-Tests + 302/302 bestehende = 332/332 gesamt gruen
+
+## K-Sprint 18: Block-Proposal-Pipeline (03.08.2026)
+
+`kernel/src/blockchain.rs` — Block, BlockChain, ProposalPipeline.
+
+- `Block` — Block-Struktur mit height, parent_hash, transactions, tx_root (Merkle),
+  state_root, gas_used, total_fees, Ed25519-Signatur
+  - Deterministische Block-ID (Hash über alle Felder)
+  - Merkle-Root über alle Tx-IDs
+- `BlockChain` — lineare Block-Kette (Genesis → Block 1 → Block 2 → ...)
+  - `add_genesis()` / `add_block()` mit Height- und Parent-Checks
+  - `get_block(height)` / `get_by_hash()` / `last_block()`
+- `ProposalPipeline` — verbindet Mempool → Block → DAG → Voting
+  - `create_genesis()` — Genesis-Block + DAG-Vertex
+  - `propose_block(max_txs)` — nimmt Txs aus Mempool, validiert, wendet auf State an,
+    erzeugt Block, fügt zur Chain hinzu, propagiert als DAG-Vertex
+  - `process_remote_block()` — verarbeitet eingehenden Block von anderem Node
+  - `vote_on_block()` — stimmt über Block ab via Konsens
+  - `cleanup_mempool()` — entfernt bestätigte Txs
+- Volle Pipeline: Mempool (K17) → Block → Chain → DAG (K16) → Voting → Finality
+- 20/20 neue Pipeline-Tests + 332/332 bestehende = 352/352 gesamt gruen
