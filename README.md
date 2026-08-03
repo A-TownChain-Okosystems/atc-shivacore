@@ -281,6 +281,14 @@ von Modulen.
 **Naechster Schritt:** K-Sprint 10 — Block-Device-Layer (virtio-blk fuer QEMU)
 oder Timer/Clock-Subsystem (Praezision fuer Scheduler).
 
+
+## Kernel-Hilfsmodule (nicht in K-Sprints dokumentiert)
+
+- `kernel/src/serial.rs` — Serielle Debug-Konsole (QEMU: `-serial stdio`), `println!`-Backend
+- `kernel/src/framebuffer.rs` — Framebuffer-Textausgabe (gerasterte Glyphen, kein VGA-Text-Modus)
+- `kernel/src/ats1000.rs` — ATS-1000 ShivaCore Interface (Traits: ProcessManager, MemoryManager, FileSystem, NetworkStack)
+- `kernel/src/remote_caps.rs` — Remote-Capability-Tickets (RCT), kryptografisch signierte Delegation an fremde Knoten
+
 ## K-Sprint 10: Timer/Clock-Subsystem (03.08.2026)
 
 `kernel/src/timer.rs` — Monotone Uhr, Deadline-Tracking, Sleep-Queue.
