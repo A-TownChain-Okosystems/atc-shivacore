@@ -713,3 +713,15 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - Max 64 gleichzeitige User-Prozesse, PIDs ab 1000
 - 41 Tests
 - **753/753 Tests gesamt gruen** (712 + 41)
+## K-Sprint 31: ELF64 Loader + Signal Handling (04.08.2026)
+
+- **elf_loader.rs**: ELF64-Parser und -Loader für User-Prozesse (Ring 3)
+- ELF64 Parser: Header/Program-Header, Magic/Class/Endian/Type/Machine-Validierung
+- PT_LOAD Segments, PF_X/W/R Flags, BSS-Detection, Code/Data-Segment-Extraktion
+- ElfLoader::load_elf() integriert mit UserspaceManager, create_minimal_elf() für Tests
+- Signal Handling (POSIX-ähnlich): 11 Signale (SIGKILL, SIGTERM, SIGSEGV, etc.)
+- SignalDisposition (Default/Ignore/Catch), SignalAction (Terminate/Core/Stop/Continue/Ignore)
+- SignalManager: register, set_handler, block/unblock, send, deliver, resolve_action
+- Unblockable signals (SIGKILL/SIGSTOP), pending signal queue per process
+- 46 Tests
+- **799/799 Tests gesamt gruen** (753 + 46)
