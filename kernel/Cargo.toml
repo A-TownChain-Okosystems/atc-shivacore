@@ -9,6 +9,13 @@ name = "shivacore"
 test = false
 bench = false
 
+[lib]
+name = "shivacore"
+path = "src/lib.rs"
+test = true
+bench = false
+crate-type = ["lib"]
+
 [dependencies]
 bootloader_api = "0.11"
 volatile = "0.2.6"

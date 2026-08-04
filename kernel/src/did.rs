@@ -107,7 +107,11 @@ pub struct Ed25519Signer {
 impl Ed25519Signer {
     /// Erzeugt eine neue Ed25519-Identitaet mit frischem Schluesselpaar (deterministic seed)
     pub fn new() -> Self {
-        let seed: [u8; 32] = [0u8; 32];
+        use core::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        let seed_val = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let mut seed = [0u8; 32];
+        seed[0..8].copy_from_slice(&seed_val.to_le_bytes());
         let signing_key = SigningKey::from_bytes(&seed);
         let verifying_key = signing_key.verifying_key();
         let public_bytes = verifying_key.to_bytes();

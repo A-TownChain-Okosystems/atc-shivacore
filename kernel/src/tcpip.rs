@@ -28,7 +28,7 @@ pub const IP_PROTO_UDP: u8 = 17;
 // IPv4-Packet
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Ipv4Packet {
     pub version: u8,
     pub ihl: u8,
@@ -128,7 +128,7 @@ impl Ipv4Packet {
 // UDP-Packet
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UdpPacket {
     pub src_port: u16,
     pub dst_port: u16,
@@ -175,7 +175,7 @@ pub const TCP_PSH: u8 = 0x08;
 pub const TCP_ACK: u8 = 0x10;
 pub const TCP_URG: u8 = 0x20;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TcpSegment {
     pub src_port: u16,
     pub dst_port: u16,
@@ -241,7 +241,7 @@ impl TcpSegment {
 // Routing-Table
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Route {
     pub network: Ipv4Address,
     pub prefix_len: u8,
@@ -302,7 +302,7 @@ pub enum TcpState {
     FinWait1, FinWait2, CloseWait, LastAck, TimeWait,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UdpSocket {
     pub id: SocketId,
     pub local_ip: Ipv4Address,
@@ -312,7 +312,7 @@ pub struct UdpSocket {
     pub recv_queue: Vec<Vec<u8>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TcpSocket {
     pub id: SocketId,
     pub local_ip: Ipv4Address,

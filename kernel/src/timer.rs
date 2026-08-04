@@ -209,26 +209,27 @@ impl TimerManager {
         let now = self.source.now_ns();
         let mut fired = Vec::new();
 
-        // Sammle alle abgelaufenen Events
-        let expired_keys: Vec<u64> = self.events.keys()
-            .filter(|&&deadline| deadline <= now)
-            .copied()
-            .collect();
+        loop {
+            let expired_keys: Vec<u64> = self.events.keys()
+                .filter(|&&deadline| deadline <= now)
+                .copied()
+                .collect();
 
-        for key in expired_keys {
-            if let Some(event) = self.events.remove(&key) {
-                // Bei periodischen Timern: nächsten Tick eintragen
-                if let TimerCallback::Periodic(interval) = event.callback_type {
-                    let next_deadline = now + interval;
-                    let mut next_event = event.clone();
-                    next_event.deadline_ns = next_deadline;
-                    self.events.insert(next_deadline, next_event);
+            if expired_keys.is_empty() { break; }
+
+            for key in expired_keys {
+                if let Some(event) = self.events.remove(&key) {
+                    if let TimerCallback::Periodic(interval) = event.callback_type {
+                        let next_deadline = event.deadline_ns + interval;
+                        let mut next_event = event.clone();
+                        next_event.deadline_ns = next_deadline;
+                        self.events.insert(next_deadline, next_event);
+                    }
+                    fired.push(event);
                 }
-                fired.push(event);
             }
         }
 
-        // Sortiere nach Deadline
         fired.sort_by_key(|e| e.deadline_ns);
         fired
     }

@@ -264,7 +264,7 @@ impl ReputationSystem {
     pub fn banned_count(&self) -> usize { self.peers.lock().values().filter(|r| r.banned).count() }
 
     pub fn unban(&self, peer_id: u64) {
-        if let Some(r) = self.peers.lock().get_mut(&peer_id) { r.banned = false; }
+        if let Some(r) = self.peers.lock().get_mut(&peer_id) { r.banned = false; r.score = 0; }
     }
 }
 
@@ -463,7 +463,7 @@ pub fn simple_hash(data: &[u8]) -> [u8; 32] {
     let mut result = [0u8; 32];
     result[..4].copy_from_slice(&hash.to_be_bytes());
     // Rest mit FNV über vorangegangene Bytes füllen
-    for i in 4..32 {
+    for i in (4..32).step_by(4) {
         hash ^= result[i - 4] as u32;
         hash = hash.wrapping_mul(0x01000193);
         result[i..i+4].copy_from_slice(&hash.to_be_bytes());

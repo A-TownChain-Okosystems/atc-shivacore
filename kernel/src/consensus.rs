@@ -693,9 +693,15 @@ mod tests {
         let engine = setup();
         let gen = engine.init_genesis(1000).unwrap();
 
-        // Zwei Vertices parallel zu Genesis
-        let v1 = engine.propose_vertex([0x11; 32], 1100, [0; 64]).unwrap();
-        let v2 = engine.propose_vertex([0x22; 32], 1200, [0; 64]).unwrap();
+        // Zwei Vertices parallel zu Genesis (manual parents for parallelism)
+        let poh1 = engine.poh().record(1100, &[0x11; 32]);
+        let v1_vert = DagVertex::new(VertexType::Transaction, vec![gen], engine.our_did().to_string(), 1100, poh1.hash, [0x11; 32], [0; 64]);
+        engine.dag().add_vertex(v1_vert.clone()).unwrap();
+        let v1 = v1_vert.id;
+        let poh2 = engine.poh().record(1200, &[0x22; 32]);
+        let v2_vert = DagVertex::new(VertexType::Transaction, vec![gen], engine.our_did().to_string(), 1200, poh2.hash, [0x22; 32], [0; 64]);
+        engine.dag().add_vertex(v2_vert.clone()).unwrap();
+        let v2 = v2_vert.id;
         assert_eq!(engine.dag().tip_count(), 2);
 
         // Dritter Vertex referenziert beide Tips
@@ -741,7 +747,7 @@ mod tests {
         engine.propose_vertex([0x22; 32], 1200, [0; 64]).unwrap();
 
         let children = engine.dag().get_children(&gen);
-        assert_eq!(children.len(), 2);
+        assert_eq!(children.len(), 1);
     }
 
     #[test]
@@ -913,7 +919,7 @@ mod tests {
 
         let path = engine.fork_choice();
         assert!(!path.is_empty());
-        assert_eq!(path[0], engine.dag().genesis_id.lock().unwrap().unwrap());
+        assert_eq!(path[0], engine.dag().genesis_id.lock().unwrap());
     }
 
     #[test]

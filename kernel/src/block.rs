@@ -253,7 +253,7 @@ impl BlockBuffer {
 
 // ─── Partition-Table (MBR) ──────────────────────────────────────────────────
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PartitionEntry {
     pub bootable: bool,
     pub partition_type: u8,
@@ -261,7 +261,7 @@ pub struct PartitionEntry {
     pub block_count: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MbrPartitionTable {
     pub partitions: [Option<PartitionEntry>; 4],
 }
@@ -378,7 +378,7 @@ mod tests {
         dev.fill_block(0, b"Hello, Block World!");
         let mut read = [0u8; BLOCK_SIZE];
         dev.read_block(0, &mut read).unwrap();
-        assert_eq!(&read[..18], b"Hello, Block World!");
+        assert_eq!(&read[..19], b"Hello, Block World!");
     }
 
     // ── BlockBuffer ──────────────────────────────────────────────────────────
@@ -517,8 +517,8 @@ mod tests {
         for i in 0..3 {
             let offset = 0x1BE + i * 16;
             block[offset + 4] = 0x83;
-            block[offset + 8..offset + 12].copy_from_slice(&((i + 1) * 1000u32).to_le_bytes());
-            block[offset + 12..offset + 16].copy_from_slice(&((i + 1) * 50000u32).to_le_bytes());
+            block[offset + 8..offset + 12].copy_from_slice(&(((i + 1) as u32 * 1000)).to_le_bytes());
+            block[offset + 12..offset + 16].copy_from_slice(&(((i + 1) as u32 * 50000)).to_le_bytes());
         }
 
         let mbr = MbrPartitionTable::parse(&block).unwrap();

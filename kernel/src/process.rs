@@ -56,7 +56,7 @@ pub struct ProcessManager {
     processes: BTreeMap<Pid, ProcessControlBlock>,
     next_pid: AtomicU32,
     /// Referenz zur Capability-Tabelle (Kernel-intern)
-    caps: CapabilityTable,
+    pub caps: CapabilityTable,
 }
 
 impl ProcessManager {

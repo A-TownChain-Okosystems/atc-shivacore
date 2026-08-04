@@ -56,7 +56,7 @@ impl MessageType {
 
 // ─── P2P-Message ──────────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct P2pMessage {
     pub msg_type: MessageType,
     pub chain_id: u32,
@@ -90,7 +90,7 @@ impl P2pMessage {
     }
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, P2pError> {
-        if data.len() < 17 { return Err(P2pError::MessageTooShort); }
+        if data.len() < 15 { return Err(P2pError::MessageTooShort); }
         let msg_type = MessageType::from_u8(data[0]).ok_or(P2pError::UnknownMessageType(data[0]))?;
         let chain_id = u32::from_be_bytes([data[1], data[2], data[3], data[4]]);
         if chain_id != CHAIN_ID { return Err(P2pError::WrongChainId(chain_id)); }
@@ -133,7 +133,7 @@ pub enum PeerStatus {
 
 // ─── Peer ──────────────────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Peer {
     pub id: u64,
     pub ip: Ipv4Address,
@@ -305,7 +305,7 @@ impl GossipProtocol {
     /// Sendet eine Nachricht an einen spezifischen Peer.
     pub fn send_to(&self, peer_id: u64, msg: &P2pMessage) -> Result<Vec<u8>, P2pError> {
         let peer = self.peers.get_peer(peer_id).ok_or(P2pError::PeerNotFound)?;
-        if peer.status != PeerStatus::Connected {
+        if peer.status != PeerStatus::Connected && peer.status != PeerStatus::Connecting {
             return Err(P2pError::NotConnected);
         }
         let serialized = msg.to_bytes();
@@ -485,6 +485,7 @@ impl P2pNode {
     pub fn peers(&self) -> &Arc<PeerTable> { &self.peers }
     pub fn gossip(&self) -> &Arc<GossipProtocol> { &self.gossip }
     pub fn listen_port(&self) -> u16 { self.listen_port }
+    pub fn peer_count(&self) -> usize { self.peers.peer_count() }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

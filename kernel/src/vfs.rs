@@ -25,8 +25,8 @@ pub enum FileType {
     Symlink,
 }
 
-#[derive(Clone, Debug)]
-pub struct FileMetadata {
+#[derive(Clone, Debug, PartialEq)]
+    pub struct FileMetadata {
     pub file_type: FileType,
     pub size: u64,
     pub created_at: u64,
@@ -233,7 +233,11 @@ impl Vfs {
 
     fn check_cap(&self, pid: u64, cap_handle: u64, required: Rights) -> bool {
         let table = self.caps.lock();
-        table.check(crate::ats1000::Pid(pid as u32), crate::capability::ResourceType::FileSystem, cap_handle as u64, required)
+        if let Some(cap) = table.get(crate::capability::CapId(cap_handle)) {
+            cap.owner == crate::ats1000::Pid(pid as u32) && cap.rights.has(required)
+        } else {
+            false
+        }
     }
 
     // ── Verzeichnis-Operationen ────────────────────────────────────────────
@@ -604,13 +608,15 @@ pub enum VfsError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ats1000::Pid;
+    use crate::capability::ResourceType;
 
     fn setup_vfs() -> Vfs {
         let caps = Arc::new(Mutex::new(CapabilityTable::new()));
         // Grant full rights to process 1
         {
             let mut table = caps.lock();
-            let cap = table.create(1, Rights::READ | Rights::WRITE | Rights::EXEC | Rights::DELEGATE);
+            let cap = table.create(Pid(1), ResourceType::FileSystem, 1, Rights::READ | Rights::WRITE | Rights::EXEC | Rights::DELEGATE).0;
             // cap handle = 1 (first cap)
         }
         // We need the cap handle. Let's use a simpler approach:
@@ -620,8 +626,8 @@ mod tests {
 
     fn grant_full_caps(caps: &Arc<Mutex<CapabilityTable>>, pid: u64) -> u64 {
         let mut table = caps.lock();
-        let cap_id = table.create(pid, Rights::READ | Rights::WRITE | Rights::EXEC | Rights::DELEGATE);
-        cap_id
+        let cap_id = table.create(Pid(pid as u32), ResourceType::FileSystem, 1, Rights::READ | Rights::WRITE | Rights::EXEC | Rights::DELEGATE);
+        cap_id.0
     }
 
     // ── Verzeichnis-Tests ──────────────────────────────────────────────────
@@ -980,7 +986,7 @@ mod tests {
         // Prozess 2 bekommt nur READ (kein WRITE)
         let cap_read = {
             let mut table = caps.lock();
-            table.create(2, Rights::READ)
+            table.create(Pid(2), ResourceType::FileSystem, 2, Rights::READ).0
         };
 
         let result = vfs.mkdir("/test", 2, cap_read);
@@ -995,7 +1001,7 @@ mod tests {
         // Prozess 2 bekommt nur WRITE (kein READ)
         let cap_write = {
             let mut table = caps.lock();
-            table.create(2, Rights::WRITE)
+            table.create(Pid(2), ResourceType::FileSystem, 2, Rights::WRITE).0
         };
 
         vfs.create_file("/file.txt", 2, cap_write).unwrap();
@@ -1010,7 +1016,7 @@ mod tests {
 
         let cap_write = {
             let mut table = caps.lock();
-            table.create(2, Rights::WRITE)
+            table.create(Pid(2), ResourceType::FileSystem, 2, Rights::WRITE).0
         };
 
         vfs.create_file("/data.txt", 2, cap_write).unwrap();

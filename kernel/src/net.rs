@@ -72,7 +72,7 @@ impl Ipv4Address {
 pub const ETH_TYPE_ARP: u16 = 0x0806;
 pub const ETH_TYPE_IPV4: u16 = 0x0800;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EthernetFrame {
     pub dst_mac: MacAddress,
     pub src_mac: MacAddress,
@@ -123,7 +123,7 @@ impl EthernetFrame {
 
 // ─── ARP (Address Resolution Protocol) ──────────────────────────────────────
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ArpEntry {
     pub ip: Ipv4Address,
     pub mac: MacAddress,
@@ -202,7 +202,7 @@ pub const ARP_HW_ETHERNET: u16 = 1;
 pub const ARP_OP_REQUEST: u16 = 1;
 pub const ARP_OP_REPLY: u16 = 2;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ArpPacket {
     pub hw_type: u16,
     pub proto_type: u16,

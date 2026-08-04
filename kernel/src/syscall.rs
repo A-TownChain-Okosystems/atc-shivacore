@@ -243,7 +243,11 @@ impl SyscallDispatcher {
     /// Prüft Capability für eine gegebene Operation
     fn check_cap(&self, required: Rights) -> bool {
         let table = self.caps.lock();
-        table.check(Pid(self.pid as u32), crate::capability::ResourceType::IpcChannel, self.cap_handle as u64, required)
+        if let Some(cap) = table.get(crate::capability::CapId(self.cap_handle)) {
+            cap.owner == Pid(self.pid as u32) && cap.rights.has(required)
+        } else {
+            false
+        }
     }
 
     /// Haupt-Dispatch-Funktion
@@ -740,7 +744,7 @@ impl SyscallDispatcher {
             _ => return SyscallResult::Error(SyscallError::InvalidArgument("cap_check needs rights".into())),
         };
         let table = self.caps.lock();
-        if table.check(Pid(self.pid as u32), ResourceType::IpcChannel, cap_handle as u64, required) {
+        if table.check_any(Pid(self.pid as u32), cap_handle as u64, required) {
             SyscallResult::Success(1)
         } else {
             SyscallResult::Error(SyscallError::CapabilityDenied)
@@ -791,7 +795,7 @@ use crate::capability::{ResourceType, CapId};
 
     fn setup() -> SyscallDispatcher {
         let caps = Arc::new(Mutex::new(CapabilityTable::new()));
-        let cap_handle = caps.lock().create(1, Rights::READ | Rights::WRITE | Rights::EXEC | Rights::DELEGATE);
+        let cap_handle = caps.lock().create(Pid(1), ResourceType::FileSystem, 1, Rights::READ | Rights::WRITE | Rights::EXEC | Rights::DELEGATE).0;
 
         let processes = Arc::new(Mutex::new(ProcessManager::new()));
         let ipc = Arc::new(Mutex::new(IpcSubsystem::new()));
@@ -811,7 +815,7 @@ use crate::capability::{ResourceType, CapId};
 
     fn setup_contract() -> SyscallDispatcher {
         let caps = Arc::new(Mutex::new(CapabilityTable::new()));
-        let cap_handle = caps.lock().create(1, Rights::READ | Rights::WRITE);
+        let cap_handle = caps.lock().create(Pid(1), ResourceType::FileSystem, 1, Rights::READ | Rights::WRITE).0;
 
         let processes = Arc::new(Mutex::new(ProcessManager::new()));
         let ipc = Arc::new(Mutex::new(IpcSubsystem::new()));

@@ -84,6 +84,7 @@ pub enum CapabilityError {
 }
 
 /// Capability-Tabelle — Kernel-intern, geschuetzt durch Spinlock
+#[derive(Clone)]
 pub struct CapabilityTable {
     caps: BTreeMap<CapId, Capability>,
     by_pid: BTreeMap<Pid, Vec<CapId>>,
@@ -127,6 +128,11 @@ impl CapabilityTable {
                 cap.resource_type == resource_type && cap.resource_id == resource_id && cap.rights.has(required)
             } else { false }
         })).unwrap_or(false)
+    }
+
+    /// Check capability by cap_id only (any resource type).
+    pub fn check_any(&self, pid: Pid, cap_id: u64, required: Rights) -> bool {
+        self.caps.get(&CapId(cap_id)).map(|cap| cap.owner == pid && cap.rights.has(required)).unwrap_or(false)
     }
 
     pub fn get(&self, id: CapId) -> Option<&Capability> { self.caps.get(&id) }
