@@ -57,9 +57,8 @@ impl BitAnd for Rights {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CapId(pub u64);
 
-/// Eindeutige Prozess-ID
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Pid(pub u32);
+/// Pid wird aus ats1000 re-exportiert (einheitlicher Typ)
+pub use crate::ats1000::Pid;
 
 /// Eine Capability — das Herzstueck des Sicherheitsmodells
 #[derive(Debug, Clone)]
