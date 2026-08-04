@@ -1028,3 +1028,25 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - 10 Built-in Modules (kalloc, ksched, blkdev, netdev, atcfs, tcpip, cap, kaudit, ktrace, kcontainer)
 
 [agent: aurora-base44-superagent-6a2756186106d6f0fbb105b5]
+
+## K-Sprint 49: Module Verification & Signing (04.08.2026)
+
+**Modul:** `module_security.rs` (1682 Zeilen, 65 Tests)
+
+**Implementiert:**
+- `TrustLevel` — 4 Trust-Tiers: Core, Verified, Community, Untrusted
+- `ModuleSignature` — Ed25519/secp256k1/Placeholder, Content-Hash (SHA-256), Timestamp
+- `TrustAnchor` — Root-Zertifikate für vertrauenswürdige Signer mit Ablaufdatum
+- `RevocationEntry` — Revocation von Modulen (Name/Hash) und Signern (DID)
+- `LoadPolicy` — Strict/Permissive/Development Vorlagen, Min-Trust-Level, Version-Pin
+- `ModuleSecurityManager` — Full Security Runtime:
+  - `verify()` — 7-Check Pipeline: Blacklist → Whitelist → Revocation → Version → Hash → Signature → Policy
+  - Trust Anchor Management (add/remove/get)
+  - Revocation (Module/Hash/Signer, auto-blacklist)
+  - Blacklist/Whitelist
+  - Version Pinning (major.minor.patch comparison)
+  - Hash Tracking (Integrity verification)
+  - Security Audit Log (alle Load-Entscheidungen)
+  - Stats (requests/passed/blocked/revoked)
+
+**Tests:** 65 → 2091 gesamt (2026 + 65)
