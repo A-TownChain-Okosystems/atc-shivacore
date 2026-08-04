@@ -47,6 +47,7 @@ mod kernel_init;
 mod cross_subsystem;
 mod atcnet;
 mod genesis;
+mod genesis_bridge;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
