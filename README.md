@@ -692,3 +692,12 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - Multi-Node Block-Propagation + Chain-Convergence Tests
 - 45 Tests
 - **333/333 Tests gesamt gruen**
+
+## K-Sprint 29: Security Audit (04.08.2026)
+
+- **security_audit.rs**: Systematisches Audit aller Kernel-Subsysteme (Issue #69)
+- 7 Kategorien, 30+ Checks: Chain-Integrity, Genesis, Validators, PoH, Capability, Network, Block-Validation
+- 5 Attack-Vector-Simulationen: Chain Forgery, Genesis Replay, Height Skip, Orphan Block, Unsigned Genesis
+- Severity: Critical/High/Medium/Low/Pass
+- 34 Tests
+- **367/367 Tests gesamt gruen**
