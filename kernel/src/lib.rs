@@ -53,3 +53,4 @@ pub mod security_audit;
 pub mod userspace;
 pub mod elf_loader;
 pub mod page_fault;
+pub mod user_sched;
