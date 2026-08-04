@@ -675,3 +675,11 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - Validierung: 4-100 Validator, Stake ≥ 1000, ATC-Präfix, 66.7% Threshold
 - 38 Tests
 - **248/248 Tests gesamt gruen**
+
+## K-Sprint 27: Genesis Bridge (04.08.2026)
+
+- **genesis_bridge.rs**: Verbindet genesis.rs ↔ blockchain.rs ↔ consensus.rs
+- 6 Integration-Gaps geschlossen: Block-Konverter, PoH-Seed, Validator-Bulk-Init, State-Root, Chain-ID-Validierung, Signatur-Verifikation
+- GenesisBridge::init_from_config() + propose_block()
+- 40 Tests
+- **288/288 Tests gesamt gruen**
