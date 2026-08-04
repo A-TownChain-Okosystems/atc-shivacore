@@ -67,3 +67,4 @@ pub mod smp;
 pub mod vmm;
 pub mod cow;
 pub mod tracing;
+pub mod container_net;

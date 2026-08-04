@@ -992,3 +992,20 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - `TraceManager` — Top-Level Orchestrator, Enable/Disable All, Report Generation
 
 **Tests: 1823 gesamt** (1748 + 75 neue)
+
+## K-Sprint 47: Container Networking (04.08.2026)
+
+**Modul:** `container_net.rs` (632 Zeilen, 103 Tests)
+
+**Implementiert:**
+- `Ipv4Addr` / `IpSubnet` / `MacAddr` — IP/Subnet/MAC primitives mit Subnet-Containment
+- `NetworkNamespace` — Per-Container Netz mit Loopback, Interfaces, Routing, DNS, Stats
+- `VethPair` — Virtual Ethernet Pair (host ↔ container), IP Assignment, Bridge Attach
+- `Bridge` — Software Switch mit MAC Learning, ARP, Forwarding (Flood/Forward/Drop), STP, DHCP Pool
+- `DhcpPool` — IP Allocation, Lease Management, Expiry Cleanup
+- `FirewallRule` — nftables-style Rules (Protocol, Src/Dst IP+Mask, Port/Range, Interface, Log, Priority)
+- `FirewallChainData` — INPUT/OUTPUT/FORWARD Chains, Priority Sorting, Default Policy, Counters
+- `PortForward` — DNAT (host→container) und MASQUERADE (container→host) NAT
+- `ContainerNetManager` — Top-Level Orchestrator, Cascade Cleanup, Packet Simulation, Report
+
+[agent: aurora-base44-superagent-6a2756186106d6f0fbb105b5]
