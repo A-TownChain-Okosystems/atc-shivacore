@@ -699,5 +699,5 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - 7 Kategorien, 30+ Checks: Chain-Integrity, Genesis, Validators, PoH, Capability, Network, Block-Validation
 - 5 Attack-Vector-Simulationen: Chain Forgery, Genesis Replay, Height Skip, Orphan Block, Unsigned Genesis
 - Severity: Critical/High/Medium/Low/Pass
-- 34 Tests
-- **367/367 Tests gesamt gruen**
+- 68 Tests (34 Security + 34 Audit)
+- **709/709 Tests gesamt gruen**
