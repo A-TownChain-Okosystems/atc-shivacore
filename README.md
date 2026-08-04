@@ -725,3 +725,18 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - Unblockable signals (SIGKILL/SIGSTOP), pending signal queue per process
 - 46 Tests
 - **799/799 Tests gesamt gruen** (753 + 46)
+## K-Sprint 32: Page Fault Handler + Demand Paging (04.08.2026)
+
+- **page_fault.rs**: User-Space Memory Management — Page Faults, Demand Paging, CoW
+- PageFaultInfo (CR2 decode), PageFaultType (NotPresent/Protection/Privilege/Reserved/NX)
+- Demand Paging: allocate frame on first access, map into page table
+- Copy-on-Write: resolve write to CoW page by copying to new frame
+- Stack Growth: auto-extend stack VMA on access below current start
+- mmap/munmap: dynamic virtual memory regions with VMA tracking
+- fork_address_space: clone page tables with CoW marking for writable pages
+- VirtualMemoryArea (VMA): Code/Data/Stack/Heap/Mmap/Shared with BackingStore
+- ProcessAddressSpace: per-process page tables + VMAs
+- FrameAllocator: 16384 frames (64 MiB), alloc/free/contiguous/range
+- PageTableEntry: present/writable/executable/user/cow/dirty/accessed
+- 47 Tests
+- **846/846 Tests gesamt gruen** (799 + 47)
