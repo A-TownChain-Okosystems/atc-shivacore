@@ -48,6 +48,7 @@ mod cross_subsystem;
 mod atcnet;
 mod genesis;
 mod genesis_bridge;
+mod gossip_bridge;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
