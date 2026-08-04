@@ -10,6 +10,10 @@
 #![feature(abi_x86_interrupt)]
 #![feature(alloc_error_handler)]
 #![no_main]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
 
 extern crate alloc;
 
