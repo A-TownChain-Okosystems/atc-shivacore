@@ -77,6 +77,8 @@ pub enum Context {
     Test,
     /// User-space (Ring 3) — eingeschränkter Syscall-Zugriff via Interrupt-Gate
     User { pid: u32 },
+    /// User-space (Ring 3) — eingeschränkter Syscall-Zugriff via Interrupt-Gate
+    User { pid: u32 },
 }
 
 impl Context {
