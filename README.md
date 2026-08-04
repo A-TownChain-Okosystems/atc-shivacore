@@ -641,3 +641,10 @@ MemoryManager vollstaendig mit allocator.rs integriert:
 **162/162 Tests gesamt gruen**
 ats1000 Trait Status: ProcessManager DONE, MemoryManager DONE, FileSystem DONE, NetworkStack DONE
 KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
+
+## K-Sprint 23: Cross-Subsystem Integration Tests (04.08.2026)
+
+- **cross_subsystem.rs**: 15 Integration-Tests über alle Kernel-Subsysteme
+- TestHarness vereinigt: CapabilityTable + MemoryManager + ATCFS + ProcessManager + IPC
+- Flows: Full Lifecycle, IPC, Isolation, Delegation, Broadcast, Content-Addressing, Stats, Priorities, States, Boot, Cleanup, Mixed Alloc, ats1000 Traits, Manifest, Stress (50 Processes)
+- **178/178 Tests gesamt gruen**
