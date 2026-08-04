@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::ats1000::{MemoryManager, MemRegion, Pid};
-use crate::capability::{CapabilityTable, Pid as CapPid, ResourceType, Rights};
+use crate::capability::{CapabilityTable, ResourceType, Rights};
 
 // === Konstanten — synchronisiert mit allocator.rs === //
 // allocator.rs: HEAP_START = 0x4444_4444_0000, HEAP_SIZE = 100 * 1024
@@ -159,7 +159,7 @@ impl KernelMemoryManager {
 
         // Capability vergeben
         caps.create(
-            CapPid(pid), ResourceType::Memory, region_id,
+            pid, ResourceType::Memory, region_id,
             Rights::READ | Rights::WRITE | Rights::EXEC | Rights::DELEGATE,
         );
 
@@ -185,7 +185,7 @@ impl KernelMemoryManager {
         let region = self.regions.get(&region_id).ok_or(MemError::InvalidRegion)?;
 
         // Capability-Check
-        if !caps.check(CapPid(pid), ResourceType::Memory, region_id, Rights::WRITE) {
+        if !caps.check(pid, ResourceType::Memory, region_id, Rights::WRITE) {
             return Err(MemError::NoCapability);
         }
 
@@ -203,7 +203,7 @@ impl KernelMemoryManager {
         self.regions.remove(&region_id);
 
         // Capabilities widerrufen
-        let cap_ids: Vec<_> = caps.list_for(CapPid(pid)).iter()
+        let cap_ids: Vec<_> = caps.list_for(pid).iter()
             .filter(|c| c.resource_type == ResourceType::Memory && c.resource_id == region_id)
             .map(|c| c.id)
             .collect();
@@ -223,7 +223,7 @@ impl KernelMemoryManager {
         region_id: u64,
     ) -> Result<AllocatedRegion, MemError> {
         let region = self.regions.get(&region_id).ok_or(MemError::InvalidRegion)?;
-        if !caps.check(CapPid(pid), ResourceType::Memory, region_id, Rights::READ) {
+        if !caps.check(pid, ResourceType::Memory, region_id, Rights::READ) {
             return Err(MemError::NoCapability);
         }
         Ok(*region)
@@ -238,7 +238,7 @@ impl KernelMemoryManager {
         region_id: u64,
     ) -> Result<AllocatedRegion, MemError> {
         let region = self.regions.get(&region_id).ok_or(MemError::InvalidRegion)?;
-        if !caps.check(CapPid(pid), ResourceType::Memory, region_id, Rights::WRITE) {
+        if !caps.check(pid, ResourceType::Memory, region_id, Rights::WRITE) {
             return Err(MemError::NoCapability);
         }
         Ok(*region)
@@ -440,7 +440,7 @@ impl MemoryManager for KernelMemoryManager {
 
     fn mmap(&mut self, addr: u64, size: u64) -> Option<MemRegion> {
         let _ = addr; // Hint wird ignoriert (Bump-Allocator)
-        self.alloc(size, 0) // PID 0 = Kernel
+        self.alloc(size, Pid(0)) // PID 0 = Kernel
     }
 }
 
@@ -478,7 +478,7 @@ pub fn boot_log() -> String {
 mod tests {
     use super::*;
 
-    fn pid(n: u32) -> Pid { n }
+    fn pid(n: u32) -> Pid { Pid(n) }
 
     // === Basis-Tests === //
 
@@ -506,9 +506,9 @@ mod tests {
         let mut mm = KernelMemoryManager::new();
         let mut caps = CapabilityTable::new();
         let r = mm.allocate(&mut caps, pid(1), 4096).unwrap();
-        assert!(caps.check(CapPid(pid(1)), ResourceType::Memory, r.region_id, Rights::READ));
-        assert!(caps.check(CapPid(pid(1)), ResourceType::Memory, r.region_id, Rights::WRITE));
-        assert!(caps.check(CapPid(pid(1)), ResourceType::Memory, r.region_id, Rights::EXEC));
+        assert!(caps.check(pid(1), ResourceType::Memory, r.region_id, Rights::READ));
+        assert!(caps.check(pid(1), ResourceType::Memory, r.region_id, Rights::WRITE));
+        assert!(caps.check(pid(1), ResourceType::Memory, r.region_id, Rights::EXEC));
     }
 
     #[test]
@@ -521,7 +521,7 @@ mod tests {
         mm.deallocate(&mut caps, pid(1), r.region_id).unwrap();
 
         // Cap widerrufen
-        assert!(!caps.check(CapPid(pid(1)), ResourceType::Memory, r.region_id, Rights::WRITE));
+        assert!(!caps.check(pid(1), ResourceType::Memory, r.region_id, Rights::WRITE));
         // Region weg
         assert_eq!(mm.region_count(), 0);
     }
