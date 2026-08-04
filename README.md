@@ -701,3 +701,15 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - Severity: Critical/High/Medium/Low/Pass
 - 68 Tests (34 Security + 34 Audit)
 - **709/709 Tests gesamt gruen**
+## K-Sprint 30: Userspace / Ring-3 Implementation (04.08.2026)
+
+- **userspace.rs**: User-Level Prozesse (Ring 3) — Privilege-Level-Wechsel, Address-Spaces-Management
+- PrivilegeLevel (Ring 0/3), UserAddressSpace (Code/Data/Stack/Heap, 4 GiB Layout)
+- UserBinary (vereinfachter ELF-Lader), UserContext (CPU-State für IRET: rip, rsp, cs=0x1B, ss=0x23)
+- GdtSelectors (Ring-3 Code/Data: 0x1B/0x23, Ring-0: 0x08/0x10, TSS: 0x2B)
+- UserspaceManager: load_binary, enter_userspace, handle_syscall, exit_process, reap_dead
+- Stack push/pop mit Bounds-Checking, Memory-Access-Validierung (Segment-Fault Detection)
+- Syscall Context::User hinzugefügt — erlaubt: I/O, IPC, Caps, Alloc, Sched (keine Contract/Genesis)
+- Max 64 gleichzeitige User-Prozesse, PIDs ab 1000
+- 41 Tests
+- **753/753 Tests gesamt gruen** (712 + 41)
