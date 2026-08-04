@@ -801,4 +801,4 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - KernelLog: ring buffer (4096 entries), seq numbers, level filtering, dmesg()
 - filter_by_level(), filter_by_subsystem(), total_logged/dropped stats
 - 48 Tests
-- **1123/1123 Tests gesamt gruen** (1075 + 48)
+- **1173/1173 Tests gesamt gruen** (1075 + 48)
