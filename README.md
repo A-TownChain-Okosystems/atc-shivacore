@@ -657,3 +657,11 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - ats1000::NetworkStack Trait implementiert
 - 32 Tests
 - **210/210 Tests gesamt gruen**
+
+## K-Sprint 25: Type-Mismatch Bereinigung (04.08.2026)
+
+- Einheitlicher `Pid`-Typ: `ats1000::Pid` = `pub struct Pid(pub u32)` (einzige Definition)
+- `capability.rs` re-exportiert: `pub use crate::ats1000::Pid`
+- Alle `CapPid`-Aliase und `.0`-Konvertierungen entfernt
+- Issue #1 gelöst
+- **210/210 Tests gesamt gruen**
