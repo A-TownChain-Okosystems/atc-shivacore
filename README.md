@@ -790,6 +790,23 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - SystemManager: boot_system() (full 10-phase), shutdown, tick, spawn/reap, system_info
 - 58 Tests
 - **1075/1075 Tests gesamt gruen** (1017 + 58)
+## K-Sprint 37: Unix Domain Sockets + Network Socket API (04.08.2026)
+
+**Modul:** `sockets.rs` (1526 Zeilen, 50 Tests)
+
+**Implementiert:**
+- SocketDomain (Unix/Inet/Inet6), SocketType (Stream/Datagram/Raw/SeqPacket), Protocol (TCP/UDP/ICMP)
+- SocketAddr: Unix-Pfad (108 max), IPv4:Port, IPv6:Port, Loopback, Wildcard
+- SocketState: 7 States (Unconnected→Listening→Connecting→Connected→Closing→Closed→Error)
+- SocketBuffer: 64 KiB, partial read/write, full detection
+- SocketError: 15 POSIX-ähnliche Fehler mit errno-Mapping
+- SocketManager: socket/bind/listen/accept/connect/send/recv/sendto/recvfrom/close/setsockopt/poll
+- Poll-Integration mit K34 (User I/O)
+- Unix Domain Sockets für lokales IPC, TCP/UDP für Netzwerk
+
+**Tests:** +50 → 1173 gesamt
+
+
 ## K-Sprint 38: Device Filesystem + Kernel Logging (04.08.2026)
 
 - **devfs.rs**: /dev-Dateisystem + Kernel Ring Buffer (dmesg)
