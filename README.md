@@ -683,3 +683,12 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - GenesisBridge::init_from_config() + propose_block()
 - 40 Tests
 - **288/288 Tests gesamt gruen**
+
+## K-Sprint 28: P2P Gossip Integration (04.08.2026)
+
+- **gossip_bridge.rs**: Verbindet atcnet.rs ↔ genesis_bridge.rs
+- 6 Integration-Punkte: Block-Gossip, Block-Sync, Vote-Gossip, Chain-ID-Validierung, Mempool-Gossip, Peer-Height-Tracking
+- GossipBridge::init() + propose_and_gossip() + handle_peer_message()
+- Multi-Node Block-Propagation + Chain-Convergence Tests
+- 45 Tests
+- **333/333 Tests gesamt gruen**
