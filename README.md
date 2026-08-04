@@ -778,3 +778,15 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - DriverManager: coordinates all drivers, simulated() creates common devices, init_all()
 - 61 Tests
 - **1017/1017 Tests gesamt gruen** (956 + 61)
+## K-Sprint 36: System Boot + Init Process + Process Groups (04.08.2026)
+
+- **system.rs**: Boot-Sequence, Init-Prozess (PID 1), Prozessgruppen/Sessions
+- BootPhase (10 Phasen: PreBoot→Early→Memory→Core→Drivers→Filesystem→Network→Userspace→Init→Running)
+- BootSequence: advance/log/progress, phase timestamps, boot_complete, shutdown
+- UserGroup (uid/gid/euid/egid), root, setuid/setgid/seteuid (root-only)
+- ProcessGroup + Session (pgid, members, controlling_tty, sessions)
+- ProcessGroupManager: create_session (setsid), create_group, join_group, remove_process
+- InitProcess (PID 1): start, children, restart, shutdown, exit, uptime, max_restarts
+- SystemManager: boot_system() (full 10-phase), shutdown, tick, spawn/reap, system_info
+- 58 Tests
+- **1075/1075 Tests gesamt gruen** (1017 + 58)
