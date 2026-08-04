@@ -163,22 +163,22 @@ impl KernelState {
     /// Smoke-Test: allokiert Speicher, schreibt eine Datei, liest sie zurück
     pub fn smoke_test(&mut self) -> Result<(), BootError> {
         // 1. Memory allocation
-        let region = self.memory.allocate(1, 1024)
+        let region = self.memory.allocate(crate::ats1000::Pid(1), 1024)
             .map_err(|_| BootError::SmokeTestFailed)?;
         assert_eq!(region.size, 1024);
 
         // 2. FS write
         let caps = &self.memory.caps;
-        self.fs.write_file(caps, "/tmp/smoke_test.txt", b"ShivaCore boot OK", crate::capability::Pid(1))
+        self.fs.write_file(caps, "/tmp/smoke_test.txt", b"ShivaCore boot OK", crate::ats1000::Pid(1))
             .map_err(|_| BootError::SmokeTestFailed)?;
 
         // 3. FS read
-        let (cid, node) = self.fs.read_file(caps, "/tmp/smoke_test.txt", crate::capability::Pid(1))
+        let (cid, node) = self.fs.read_file(caps, "/tmp/smoke_test.txt", crate::ats1000::Pid(1))
             .map_err(|_| BootError::SmokeTestFailed)?;
         assert_eq!(node.size, 17);
 
         // 4. Memory free
-        self.memory.deallocate(1, region.region_id)
+        self.memory.deallocate(crate::ats1000::Pid(1), region.region_id)
             .map_err(|_| BootError::SmokeTestFailed)?;
 
         Ok(())
@@ -296,18 +296,18 @@ mod tests {
         let mut state = KernelState::boot().unwrap();
 
         // Allocate memory for process 1
-        let r = state.memory.allocate(1, 4096).unwrap();
+        let r = state.memory.allocate(crate::ats1000::Pid(1), 4096).unwrap();
         assert_eq!(r.size, 4096);
 
         // Write file
-        state.fs.write_file(&state.memory.caps, "/tmp/test.txt", b"hello", crate::capability::Pid(1)).unwrap();
+        state.fs.write_file(&state.memory.caps, "/tmp/test.txt", b"hello", crate::ats1000::Pid(1)).unwrap();
 
         // Read back
-        let (_, node) = state.fs.read_file(&state.memory.caps, "/tmp/test.txt", crate::capability::Pid(1)).unwrap();
+        let (_, node) = state.fs.read_file(&state.memory.caps, "/tmp/test.txt", crate::ats1000::Pid(1)).unwrap();
         assert_eq!(node.size, 5);
 
         // Free memory
-        state.memory.deallocate(1, r.region_id).unwrap();
+        state.memory.deallocate(crate::ats1000::Pid(1), r.region_id).unwrap();
         assert_eq!(state.memory.stats().active_regions, 0);
     }
 
