@@ -767,3 +767,14 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - Statistics: total reads/writes/opens/closes, process_count, pipe_count
 - 62 Tests
 - **956/956 Tests gesamt gruen** (894 + 62)
+## K-Sprint 35: Hardware Driver Framework (04.08.2026)
+
+- **hw_drivers.rs**: PCI-Bus, HPET Timer, virtio-blk, virtio-net — echte Treiber-Backends
+- PCI Bus: PciDevice (BDF, BAR, virtio detection), PciBus (scan/find_by_class/find_virtio)
+- MMIO: MmioRegion (read/write, bounds checking, register access)
+- HPET Timer (implements TimerSource): init/disable, counter, ticks↔ns, 10 MHz simulated
+- virtio-blk (implements BlockDevice): read/write/flush, VirtioBlkConfig, stats
+- virtio-net (implements NetworkDevice): send/receive, RX/TX queues, link control, MAC
+- DriverManager: coordinates all drivers, simulated() creates common devices, init_all()
+- 61 Tests
+- **1017/1017 Tests gesamt gruen** (956 + 61)
