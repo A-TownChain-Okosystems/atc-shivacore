@@ -922,3 +922,29 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
   - Scheduling Domains: Hierarchical, Parent/Child, Balance-Interval
 
 **Tests:** 99 → 1586 gesamt (1487 + 99)
+
+## K-Sprint 44: Virtual Memory Management (04.08.2026)
+
+**Modul:** `vmm.rs` (2362 Zeilen, 78 Tests)
+
+**Implementiert:**
+- `PageFlags` — R/W/X/Shared/CoW/Guard/Locked/Dirty/Accessed/Swapped/Anonymous
+- `Vma` (Virtual Memory Area) — Per-Process Speicherregionen (Anonymous/File/Shared)
+- `PageEntry` — Page Table Entry mit Ref-Count (CoW), Swap-Slot, LRU-Timestamp
+- `MemoryProtection` — rwx/rw-/r--/r-x/r-s/rw-s Schutz-Modi
+- `PageFault` — 6 Fault-Typen (NotPresent/ProtectionFault/CowFault/GuardPage/StackOverflow/SwapIn)
+- `SharedMemory` — IPC über geteilte Seiten (Create/Attach/Detach/Destroy)
+- `SwapSlot` — Swap-Space Verwaltung (Swap-Out/Swap-In)
+- `ProcessMemory` — Per-Process: VMAs, Page Table, Heap/Stack, Stats
+- `VirtualMemoryManager` — Full VMM Runtime:
+  - `mmap/munmap` — Anonymous und File-Backed Memory Mappings
+  - `mprotect` — Schutz-Flags einer Region ändern
+  - `fork` — Copy-on-Write Fork (Seiten teilen, bei Write kopieren)
+  - `brk` — Heap-Management (sbrk equivalent)
+  - `handle_page_fault` — Demand Paging, CoW Resolution, Guard Page Detection
+  - `swap_out/swap_in` — LRU Page Replacement
+  - `shm_create/attach/detach/destroy` — Shared Memory IPC
+  - `setup_stack_guard/setup_heap_guard` — Guard Pages für Overflow Protection
+  - `oom_kill` — OOM Killer (größter Speicherverbraucher terminieren)
+
+**Tests:** 78 → 1664 gesamt (1586 + 78)
