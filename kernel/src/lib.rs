@@ -59,3 +59,4 @@ pub mod hw_drivers;
 pub mod system;
 pub mod sockets;
 pub mod devfs;
+pub mod threads;
