@@ -894,3 +894,31 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
   - Statistics (sent/delivered/coalesced/dropped)
 
 **Tests:** 82 → 1487 gesamt (1405 + 82)
+
+## K-Sprint 43: SMP / Multi-Core Support (04.08.2026)
+
+**Modul:** `smp.rs` (2506 Zeilen, 99 Tests)
+
+**Implementiert:**
+- `CpuId` — CPU-Identifier (BSP/AP Unterscheidung)
+- `CpuState` — Offline/Booting/Online/Paused/Stopping
+- `CpuAffinity` — 64-Bit Bitmask für Task-Pinning (hard/soft affinity), Intersect/Union
+- `RunQueue` — Per-CPU Scheduler-Queue mit Quantum, Enqueue/Dequeue, Next-Task
+- `PerCpuData` — Lokale Daten pro Kern (RunQueue, Stats, Topology, IPI-Counter, Migrations)
+- `CpuStats` — User/System/Idle/IOWait/IRQ/SoftIRQ/Steal/Guest Ticks, Utilization
+- `IpiType` — 8 IPI-Typen (Reschedule, TlbShootdown, CallFunction, Stop, WakeUp, Migrate, Crash)
+- `CpuTopology` — NUMA-Nodes, Cache-Hierarchie, Hyperthreading-Siblings, Distance
+- `TaskSmpInfo` — Per-Task SMP-Metadaten (Affinity, Current/Last CPU, Migrations)
+- `SmpBarrier` — SMP-Synchronisation (Generation-Counter, Participant-Tracking)
+- `SchedDomain` — Hierarchische Scheduling-Domains (SMT/Core/NUMA/All)
+- `SmpManager` — Full SMP Runtime:
+  - CPU Hotplug: `bring_cpu_online()`, `take_cpu_offline()` (migrates tasks), `pause/resume`
+  - Task Management: Register/Pin/Unpin, Affinity-Change with Auto-Migration
+  - Scheduling: Per-CPU Enqueue/Dequeue/Schedule-Next, Quantum-Tick
+  - Load Balancing: Find-Idle/Least-Loaded, Auto-Balance über alle Kerne
+  - Task Migration: Mit Affinity-Check, Topology-Awareness
+  - IPI: send_to_cpu/all/mask, Priority-basiert, Queue-Konsumierung
+  - SMP Barriers: Create/Arrive/Complete/Destroy
+  - Scheduling Domains: Hierarchical, Parent/Child, Balance-Interval
+
+**Tests:** 99 → 1586 gesamt (1487 + 99)
