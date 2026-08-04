@@ -49,6 +49,7 @@ mod atcnet;
 mod genesis;
 mod genesis_bridge;
 mod gossip_bridge;
+mod security_audit;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
