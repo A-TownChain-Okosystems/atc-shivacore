@@ -841,3 +841,30 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - `ThreadManager` — create_process/thread, exit/join/kill, block/unblock, futex, reap, stats
 
 **Tests:** 62 (TID, State, Exit, TLS, ThreadGroup, CloneFlags, Futex, Mutex, Condvar, Barrier, RwLock, ThreadManager, Integration)
+
+## K-Sprint 41: Container Isolation + Agent Sandboxing (04.08.2026)
+
+**Modul:** `container.rs` (2757 Zeilen, 101 Tests)
+
+**Implementiert:**
+- `Namespace` — 7 Namespace-Typen (PID, Mount, Network, IPC, UTS, User, Cgroup) mit UID/GID-Mapping
+- `ResourceLimits` — CPU/Memory/I/O/PID/FD/Network-Limits (Default/Unlimited/Minimal/HighPerf presets)
+- `ResourceUsage` — Live-Tracking + Limit-Checks (CPU, Memory, PID, FD)
+- `ContainerImage` — RootFS, EntryPoint, Args, EnvVars, Volumes, Labels, Ports
+- `VolumeMount` — Bind/Tmpfs/Overlay Mount-Typen
+- `Container` — Full Lifecycle (Created→Running→Paused→Stopped→Destroyed), Agent-Zuordnung, Capabilities
+- `SyscallFilter` — Seccomp-Style (AllowAll/BlockList/AllowList), `agent_sandbox()` preset blockt 16 gefährliche Syscalls
+- `HealthCheck` — Process/TCP/HTTP/Custom Probes, Liveness/Readiness, Auto-Restart bei Unhealthy
+- `HealthStatus` — Unknown/Starting/Healthy/Unhealthy/Degraded
+- `ContainerManager` — Full Container Runtime (Create/Start/Pause/Resume/Stop/Kill/Restart/Destroy)
+  - Agent Sandboxing: `create_agent_container()` mit Auto-Isolation
+  - Port Mapping, Network Enable/Disable
+  - Capability Grant/Revoke/Check
+  - Namespace Operations (Hostname, UID/GID-Map)
+  - Resource Management (Set Limits, Update Usage, Check Limits)
+  - Health Check Runner
+  - Stats (Total/Running/Stopped/Agent/Restarts/Failed)
+- `ContainerSnapshot` — Monitoring/API-Snapshot mit allen Metriken
+- `ContainerError` — 12 Error-Typen (NotFound/AlreadyExists/NotRunning/SyscallBlocked/etc.)
+
+**Tests:** 101 → 1405 gesamt (1304 + 101)
