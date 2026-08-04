@@ -15,7 +15,9 @@
 
 #![allow(dead_code)]
 
-pub type Pid = u32;
+/// Eindeutige Prozess-ID — einheitlich über alle Kernel-Subsysteme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Pid(pub u32);
 pub type Address = [u8; 37]; // ATC-Adresse, siehe ATC-0002
 pub type ExitCode = i32;
 
