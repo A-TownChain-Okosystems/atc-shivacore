@@ -790,3 +790,15 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - SystemManager: boot_system() (full 10-phase), shutdown, tick, spawn/reap, system_info
 - 58 Tests
 - **1075/1075 Tests gesamt gruen** (1017 + 58)
+## K-Sprint 38: Device Filesystem + Kernel Logging (04.08.2026)
+
+- **devfs.rs**: /dev-Dateisystem + Kernel Ring Buffer (dmesg)
+- DeviceType: null, zero, random, urandom, full, tty, console, stdin/stdout/stderr, mem, port
+- DeviceNode: major/minor numbers, open/read/write stats
+- DevFs: find/register/open/read/write, xorshift PRNG for /dev/random
+- /dev/null (discard+EOF), /dev/zero (zeros), /dev/full (ENOSPC), /dev/tty (console)
+- LogLevel: Emerg/Alert/Crit/Err/Warning/Notice/Info/Debug (syslog-style)
+- KernelLog: ring buffer (4096 entries), seq numbers, level filtering, dmesg()
+- filter_by_level(), filter_by_subsystem(), total_logged/dropped stats
+- 48 Tests
+- **1123/1123 Tests gesamt gruen** (1075 + 48)
