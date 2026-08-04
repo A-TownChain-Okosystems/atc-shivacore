@@ -648,3 +648,12 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - TestHarness vereinigt: CapabilityTable + MemoryManager + ATCFS + ProcessManager + IPC
 - Flows: Full Lifecycle, IPC, Isolation, Delegation, Broadcast, Content-Addressing, Stats, Priorities, States, Boot, Cleanup, Mixed Alloc, ats1000 Traits, Manifest, Stress (50 Processes)
 - **178/178 Tests gesamt gruen**
+
+## K-Sprint 24: ATCNet Protocol Handler (04.08.2026)
+
+- **atcnet.rs**: ATC-01 Core Node Protocol — 10 Nachrichtentypen (Handshake, PeerList, BlockAnn, TxBroadcast, Ping/Pong, GetBlocks/Blocks, GetMempool/Mempool)
+- AtcNetHandler: Peer-Verbindungsverwaltung, Chain-ID-Check (9000), Protokoll-Version-Check, DoS-Schutz
+- Serializer/Deserializer für alle Nachrichtentypen
+- ats1000::NetworkStack Trait implementiert
+- 32 Tests
+- **210/210 Tests gesamt gruen**
