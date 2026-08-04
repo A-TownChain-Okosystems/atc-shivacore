@@ -51,3 +51,4 @@ pub mod genesis_bridge;
 pub mod gossip_bridge;
 pub mod security_audit;
 pub mod userspace;
+pub mod elf_loader;
