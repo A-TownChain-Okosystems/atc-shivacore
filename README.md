@@ -665,3 +665,13 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - Alle `CapPid`-Aliase und `.0`-Konvertierungen entfernt
 - Issue #1 gelöst
 - **210/210 Tests gesamt gruen**
+
+## K-Sprint 26: Genesis Block Configuration (04.08.2026)
+
+- **genesis.rs**: Genesis Block für A-TownChain Mainnet (Chain-ID 9000)
+- GenesisConfig: Validator, Allokationen, Konsens-Parameter, Netzwerk-Parameter
+- GenesisBlock: Height 0, State Root, Signierung, JSON-Export
+- GenesisBuilder: build, sign, verify, export_json
+- Validierung: 4-100 Validator, Stake ≥ 1000, ATC-Präfix, 66.7% Threshold
+- 38 Tests
+- **248/248 Tests gesamt gruen**
