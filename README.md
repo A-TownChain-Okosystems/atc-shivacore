@@ -598,3 +598,23 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
   - Full Workflow: Deploy → Inference → Context → Similarity → LLM
 
 - 42/42 neue AI-Tests + 399/399 bestehende = 441/441 gesamt gruen
+
+## K-Sprint 8: MemoryManager + ATCFS (04.08.2026)
+
+### memory_manager.rs — ats1000 MemoryManager-Trait
+- KernelMemoryManager: Bump-Allocator, 4KB-Alignment, 100 MiB Limit
+- allocate(): auto READ+WRITE+EXEC+DELEGATE Cap
+- deallocate(): Cap-Check + Widerruf, stats(), regions_for()
+- 12 Tests
+
+### atcfs.rs — ats1000 FileSystem-Trait
+- AtcFileSystem: Content-Adressierung (atc1 + SHA3-256)
+- write_file/read_file/ls/delete_file/create_dir
+- Owner-basierte Zugriffskontrolle + oeffentliche Pfade
+- export_manifest() fuer On-Chain-Anchoring
+- ats1000 Trait: open/read/write/close mit File-Handles
+- 22 Tests
+
+**133/133 Tests gesamt gruen**
+
+ats1000 Trait Status: ProcessManager DONE, MemoryManager DONE, FileSystem DONE, NetworkStack STUB
