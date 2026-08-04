@@ -1,10 +1,11 @@
 // ATS-1000 — ShivaCore Interface (siehe atc-kernel/docs/ATS_STANDARDS.md)
 //
 // Dieses Modul bildet die im Standard definierte KERNEL_API 1:1 als Rust-
-// Traits/Stubs ab. In K-Sprint 0 sind die Funktionen noch nicht implementiert
-// — sie werden Schritt für Schritt in K-Sprint 1-7 gefüllt:
-//   K2 Speicher (alloc/free/mmap)   K3 Prozesse (spawn/kill/wait)
-//   K5 Dateisystem (open/read/write/close)   K7 Netzwerk (connect/send/recv)
+// Traits ab. Implementierungsstand:
+//   K3  Prozesse (spawn/kill/wait)     — process.rs         ✅ DONE
+//   K8  Speicher (alloc/free/mmap)      — memory_manager.rs   ✅ DONE
+//   K8  Dateisystem (open/read/write)   — atcfs.rs + vfs.rs   ✅ DONE
+//   K12 Netzwerk (connect/send/recv)    — net.rs              ✅ DONE
 //
 // Hinweis: Nutzt noch KEIN `alloc` (kein Heap bis K-Sprint 2) — bewusst nur
 // feste Buffer/Slices, damit dieses Modul schon in K-Sprint 0 kompiliert.
@@ -42,7 +43,8 @@ pub struct ProcessInfo {
 }
 
 /// ATS-1000 KERNEL_API — Prozessverwaltung
-/// Status: Stub. Wird in K-Sprint 3 (Multitasking) implementiert.
+/// Status: ✅ Implementiert in K-Sprint 3b (process.rs)
+///   spawn(), kill(), wait(), list_processes() — mit Capability-Integration
 pub trait ProcessManager {
     fn spawn(&mut self, ptype: ProcessType, priority: u8) -> Pid;
     fn kill(&mut self, pid: Pid) -> bool;
@@ -51,7 +53,9 @@ pub trait ProcessManager {
 }
 
 /// ATS-1000 KERNEL_API — Speicher
-/// Status: Stub. Wird in K-Sprint 2 (Paging, Heap-Allocator) implementiert.
+/// Status: ✅ Implementiert in K-Sprint 8 (memory_manager.rs)
+///   alloc(), free(), mmap() — Heap-Bridge mit allocator.rs,
+///   Capability-gated, AllocSource (KernelHeap/UserspaceBump)
 pub trait MemoryManager {
     fn alloc(&mut self, size: u64, pid: Pid) -> Option<MemRegion>;
     fn free(&mut self, region: MemRegion) -> bool;
@@ -59,7 +63,9 @@ pub trait MemoryManager {
 }
 
 /// ATS-1000 KERNEL_API — Dateisystem (siehe ATS-1002/ATCFS)
-/// Status: Stub. Wird in K-Sprint 5 implementiert.
+/// Status: ✅ Implementiert in K-Sprint 8 (atcfs.rs + vfs.rs)
+///   open(), read(), write(), close() — Content-Adressierung (atc1+SHA3-256),
+///   Owner-basierte Zugriffskontrolle, Manifest-Export
 pub trait FileSystem {
     fn open(&mut self, path: &str, mode: u8) -> Option<u64>;
     fn read(&mut self, fh: u64, buf: &mut [u8]) -> u64;
@@ -68,18 +74,19 @@ pub trait FileSystem {
 }
 
 /// ATS-1000 KERNEL_API — Netzwerk (siehe ATS-1004/ATCNet, ATC-0007)
-/// Status: Stub. Wird in K-Sprint 7 implementiert.
+/// Status: ✅ Implementiert in K-Sprint 12 (net.rs)
+///   connect(), send(), recv() — NetworkDevice Trait, LoopbackDevice,
+///   Ethernet-Frames, gekoppelt mit tcpip.rs (TCP/IP) und p2p.rs
 pub trait NetworkStack {
     fn connect(&mut self, peer_node_id: &[u8; 32]) -> Option<u64>;
     fn send(&mut self, conn: u64, msg: &[u8]) -> bool;
     fn recv(&mut self, conn: u64, buf: &mut [u8]) -> u64;
 }
 
-/// Kernel-Garantien laut ATS-1000 — werden hier als Boot-Log dokumentiert,
-/// sobald die jeweilige Eigenschaft technisch durchgesetzt wird.
+/// Kernel-Garantien laut ATS-1000 — alle technisch durchgesetzt.
 pub const KERNEL_GUARANTEES: &[&str] = &[
-    "Kein Single Point of Failure (dezentral) — ab K-Sprint 8 (P2P)",
-    "Jeder Prozess laeuft isoliert in eigenem MemRegion — ab K-Sprint 6 (Userspace)",
-    "Alle System-Calls sind auditierbar (auf-Chain) — ab K-Sprint 8",
-    "Gas-basierte Ressourcen-Abrechnung — ab K-Sprint 6 (Syscalls)",
+    "Kein Single Point of Failure (dezentral) — ✅ p2p.rs (K14)",
+    "Jeder Prozess laeuft isoliert in eigenem MemRegion — ✅ process.rs + memory_manager.rs (K3/K8)",
+    "Alle System-Calls sind auditierbar — ✅ security.rs AuditLog (K15)",
+    "Gas-basierte Ressourcen-Abrechnung — ✅ syscall.rs + vm.rs (K9/K19)",
 ];
