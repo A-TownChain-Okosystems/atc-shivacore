@@ -44,6 +44,7 @@ mod vm;
 mod contract;
 mod ai;
 mod kernel_init;
+mod cross_subsystem;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
