@@ -75,6 +75,8 @@ pub enum Context {
     Contract,
     /// Mock-Syscalls für Tests
     Test,
+    /// User-space (Ring 3) — eingeschränkter Syscall-Zugriff via Interrupt-Gate
+    User { pid: u32 },
 }
 
 impl Context {
@@ -90,6 +92,16 @@ impl Context {
                 )
             }
             Context::Test => true, // alle (mit Mocks)
+            Context::User { .. } => {
+                matches!(syscall,
+                    SYS_OPEN | SYS_READ | SYS_WRITE | SYS_CLOSE
+                    | SYS_SPAWN | SYS_KILL | SYS_WAIT
+                    | SYS_IPC_CREATE | SYS_IPC_SEND | SYS_IPC_RECV
+                    | SYS_IPC_GRANT | SYS_IPC_CLOSE
+                    | SYS_CAP_CHECK | SYS_CAP_CREATE | SYS_CAP_DELEGATE
+                    | SYS_ALLOC | SYS_FREE | SYS_MEMCPY | SYS_SCHED_YIELD
+                )
+            }
         }
     }
 }
