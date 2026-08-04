@@ -740,3 +740,17 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - PageTableEntry: present/writable/executable/user/cow/dirty/accessed
 - 47 Tests
 - **846/846 Tests gesamt gruen** (799 + 47)
+## K-Sprint 33: User Process Scheduling + Context Switching (04.08.2026)
+
+- **user_sched.rs**: Preemptive Round-Robin Scheduler für Ring-3-Prozesse
+- IretFrame (IRET-Frame für Ring-0→Ring-3 Transition), SavedRegisters (16 GPRs), SavedContext
+- Quantum (tick-basiertes Zeitquantum, Default 10 Ticks), Quantum-Tick-Preemption
+- SchedState (Ready/Running/Blocked/Zombie), BlockReason (IoWait/Sleep/Stopped/SignalWait/IpcWait/WaitChild)
+- SchedEntry: PID + State + Quantum + Priority + Saved Context + CPU-Stats
+- UserScheduler: Round-Robin mit Priorität, Timer-Driven Preemption, Voluntary Yield
+- block/unblock, exit/zombie, sleep/wake, stop/continue (SIGSTOP/SIGCONT)
+- reap_zombies, statistics (ticks/switches/preemptions/yields)
+- UserProcessSystem: integriert UserspaceManager + SignalManager + UserScheduler
+- spawn → register signals + add scheduler, kill → unregister + exit all, timer_tick → signal delivery + preemption
+- 48 Tests
+- **894/894 Tests gesamt gruen** (846 + 48)
