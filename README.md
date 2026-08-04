@@ -819,3 +819,25 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - filter_by_level(), filter_by_subsystem(), total_logged/dropped stats
 - 48 Tests
 - **1173/1173 Tests gesamt gruen** (1075 + 48)
+
+## K-Sprint 39: Threading + Futex
+
+**Modul:** `threads.rs` (1467 Zeilen, 62 Tests)
+
+**Komponenten:**
+- `Tid` — Thread-ID
+- `ThreadState` — Created/Ready/Running/Blocked/Exited mit BlockReason
+- `ExitCode` — Success/Error/Killed
+- `SavedRegs` — 16 GPRs + RIP + RFLAGS
+- `TlsBlock` — Thread-Local Storage (read/write/OOB)
+- `Thread` — tid, pid, state, regs, stack, TLS, futex_addr
+- `ThreadGroup` — Per-Prozess Thread-Gruppe, alloc/add/remove/reap
+- `CloneFlags` — CLONE_VM/FS/FILES/SIGHAND/THREAD/SETTLS (bitflags)
+- `FutexTable` — wait/wake/requeue/bitset
+- `FutexMutex` — Fast Userspace Mutex (Unlocked/Locked/Contested)
+- `FutexCondvar` — Condition Variable
+- `FutexBarrier` — Barrier mit Generation-Counter
+- `FutexRwLock` — Read-Write Lock
+- `ThreadManager` — create_process/thread, exit/join/kill, block/unblock, futex, reap, stats
+
+**Tests:** 62 (TID, State, Exit, TLS, ThreadGroup, CloneFlags, Futex, Mutex, Condvar, Barrier, RwLock, ThreadManager, Integration)
