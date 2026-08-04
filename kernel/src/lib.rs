@@ -54,3 +54,4 @@ pub mod userspace;
 pub mod elf_loader;
 pub mod page_fault;
 pub mod user_sched;
+pub mod user_io;
