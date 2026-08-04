@@ -40,6 +40,8 @@ impl Rights {
     pub const ALL:   Rights = Rights(1 | 2 | 4 | 8);
 
     pub fn has(self, other: Rights) -> bool { (self.0 & other.0) == other.0 }
+    pub fn from_bits_truncate(bits: u8) -> Rights { Rights(bits & 0x0F) }
+    pub fn bits(self) -> u8 { self.0 }
     pub fn is_empty(self) -> bool { self.0 == 0 }
 }
 

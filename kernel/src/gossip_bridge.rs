@@ -8,6 +8,7 @@
 //!   5. Mempool-Gossip: TxBroadcast Integration
 //!   6. Peer-Height-Tracking: Automatische Sync-Erkennung
 
+use alloc::format;
 extern crate alloc;
 
 use alloc::collections::BTreeMap;

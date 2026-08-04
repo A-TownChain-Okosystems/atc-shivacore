@@ -7,6 +7,7 @@
 // Baut auf K13 (TCP/IP) und K6 (DID) auf.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::vec;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};

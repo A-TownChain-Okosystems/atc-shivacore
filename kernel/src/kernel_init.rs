@@ -17,6 +17,7 @@
 //! In Test-Mode: alle Subsysteme werden simuliert.
 //! In Kernel-Mode: L0 ist echt (linked_list_allocator), Rest auf Basis davon.
 
+use alloc::boxed::Box;
 extern crate alloc;
 
 use alloc::format;

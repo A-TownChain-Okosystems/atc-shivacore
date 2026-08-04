@@ -6,6 +6,8 @@
 // Context-Isolation (Node/Contract/Test), Gas-Tracking, Capability-Gating.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::format;
+use alloc::vec;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -14,9 +16,11 @@ use spin::Mutex;
 
 use crate::capability::{CapabilityTable, Rights};
 use crate::process::ProcessManager;
-use crate::ipc::IpcSubsystem;
+use crate::ipc::{IpcSubsystem, ChannelId};
+use crate::ats1000::Pid;
+use crate::capability::{ResourceType, CapId};
 use crate::vfs::{Vfs, OpenMode, VfsError};
-use crate::scheduler::Scheduler;
+use crate::scheduler::DaHeftScheduler as Scheduler;
 
 // ─── Syscall-Nummern (ATC-96) ─────────────────────────────────────────────
 
@@ -239,7 +243,7 @@ impl SyscallDispatcher {
     /// Prüft Capability für eine gegebene Operation
     fn check_cap(&self, required: Rights) -> bool {
         let table = self.caps.lock();
-        table.check(self.pid, self.cap_handle, required).is_ok()
+        table.check(Pid(self.pid as u32), crate::capability::ResourceType::IpcChannel, self.cap_handle as u64, required)
     }
 
     /// Haupt-Dispatch-Funktion
@@ -321,10 +325,9 @@ impl SyscallDispatcher {
         }
 
         let mut pm = self.processes.lock();
-        match pm.spawn(self.pid, &name) {
-            Ok(pid) => SyscallResult::Success(pid),
-            Err(e) => SyscallResult::Error(SyscallError::ProcessError(format!("{:?}", e))),
-        }
+        let ptype = crate::process::ProcessType::Agent;
+        let pid = pm.spawn(ptype, 128);
+        SyscallResult::Success(pid.0 as u64)
     }
 
     fn sys_kill(&self, args: &[SyscallArg]) -> SyscallResult {
@@ -338,10 +341,8 @@ impl SyscallDispatcher {
         }
 
         let mut pm = self.processes.lock();
-        match pm.kill(target_pid) {
-            Ok(()) => SyscallResult::Ok,
-            Err(e) => SyscallResult::Error(SyscallError::ProcessError(format!("{:?}", e))),
-        }
+        let result = pm.kill(Pid(target_pid as u32), 0);
+        if result { SyscallResult::Ok } else { SyscallResult::Error(SyscallError::ProcessError("kill failed".into())) }
     }
 
     fn sys_wait(&self, args: &[SyscallArg]) -> SyscallResult {
@@ -350,10 +351,10 @@ impl SyscallDispatcher {
             _ => return SyscallResult::Error(SyscallError::InvalidArgument("wait needs pid".into())),
         };
 
-        let mut pm = self.processes.lock();
-        match pm.wait(target_pid) {
-            Ok(code) => SyscallResult::Success(code),
-            Err(e) => SyscallResult::Error(SyscallError::ProcessError(format!("{:?}", e))),
+        let pm = self.processes.lock();
+        match pm.wait(Pid(target_pid as u32)) {
+            Some(code) => SyscallResult::Success(code as u64),
+            None => SyscallResult::Error(SyscallError::ProcessError("process not terminated".into())),
         }
     }
 
@@ -612,8 +613,9 @@ impl SyscallDispatcher {
             return SyscallResult::Error(SyscallError::CapabilityDenied);
         }
         let mut ipc = self.ipc.lock();
-        let channel_id = ipc.create_channel(self.pid, capacity);
-        SyscallResult::Success(channel_id)
+        let mut caps = self.caps.lock();
+        let channel_id = ipc.create_channel(&mut caps, Pid(self.pid as u32), capacity);
+        SyscallResult::Success(channel_id.0)
     }
 
     fn sys_ipc_send(&self, args: &[SyscallArg]) -> SyscallResult {
@@ -631,7 +633,8 @@ impl SyscallDispatcher {
             return SyscallResult::Error(SyscallError::CapabilityDenied);
         }
         let mut ipc = self.ipc.lock();
-        match ipc.send(channel_id, self.pid, &data, &self.caps.lock()) {
+        let caps = self.caps.lock();
+        match ipc.send(&caps, Pid(self.pid as u32), ChannelId(channel_id), data) {
             Ok(()) => SyscallResult::Ok,
             Err(e) => SyscallResult::Error(SyscallError::IpcError(format!("{:?}", e))),
         }
@@ -647,8 +650,9 @@ impl SyscallDispatcher {
             return SyscallResult::Error(SyscallError::CapabilityDenied);
         }
         let mut ipc = self.ipc.lock();
-        match ipc.recv(channel_id, self.pid, &self.caps.lock()) {
-            Ok(data) => SyscallResult::SuccessString(String::from_utf8_lossy(&data).to_string()),
+        let caps = self.caps.lock();
+        match ipc.recv(&caps, Pid(self.pid as u32), ChannelId(channel_id)) {
+            Ok(data) => SyscallResult::SuccessString(String::from_utf8_lossy(&data.data).to_string()),
             Err(e) => SyscallResult::Error(SyscallError::IpcError(format!("{:?}", e))),
         }
     }
@@ -671,8 +675,9 @@ impl SyscallDispatcher {
             return SyscallResult::Error(SyscallError::CapabilityDenied);
         }
         let mut ipc = self.ipc.lock();
-        match ipc.grant_access(channel_id, self.pid, target_pid, rights, &mut self.caps.lock()) {
-            Ok(()) => SyscallResult::Ok,
+        let mut caps = self.caps.lock();
+        match ipc.grant_access(&mut caps, Pid(self.pid as u32), ChannelId(channel_id), Pid(target_pid as u32), rights) {
+            Ok(cap_id) => SyscallResult::Success(cap_id.0),
             Err(e) => SyscallResult::Error(SyscallError::IpcError(format!("{:?}", e))),
         }
     }
@@ -687,10 +692,9 @@ impl SyscallDispatcher {
             return SyscallResult::Error(SyscallError::CapabilityDenied);
         }
         let mut ipc = self.ipc.lock();
-        match ipc.close_channel(channel_id, self.pid, &mut self.caps.lock()) {
-            Ok(()) => SyscallResult::Ok,
-            Err(e) => SyscallResult::Error(SyscallError::IpcError(format!("{:?}", e))),
-        }
+        let mut caps = self.caps.lock();
+        let result = ipc.close_channel(&mut caps, Pid(self.pid as u32), ChannelId(channel_id));
+        if result { SyscallResult::Ok } else { SyscallResult::Error(SyscallError::IpcError("close failed".into())) }
     }
 
     // ── Capability-Syscalls ──────────────────────────────────────────────────
@@ -701,8 +705,8 @@ impl SyscallDispatcher {
             _ => return SyscallResult::Error(SyscallError::InvalidArgument("cap_create needs rights".into())),
         };
         let mut table = self.caps.lock();
-        let cap_id = table.create(self.pid, rights);
-        SyscallResult::Success(cap_id)
+        let cap_id = table.create(Pid(self.pid as u32), ResourceType::IpcChannel, 0, rights);
+        SyscallResult::Success(cap_id.0)
     }
 
     fn sys_cap_delegate(&self, args: &[SyscallArg]) -> SyscallResult {
@@ -720,8 +724,8 @@ impl SyscallDispatcher {
         };
 
         let mut table = self.caps.lock();
-        match table.delegate(self.pid, cap_handle, target_pid, rights) {
-            Ok(new_cap) => SyscallResult::Success(new_cap),
+        match table.delegate(Pid(self.pid as u32), CapId(cap_handle), Pid(target_pid as u32), rights) {
+            Ok(new_cap) => SyscallResult::Success(new_cap.0),
             Err(e) => SyscallResult::Error(SyscallError::ProcessError(format!("{:?}", e))),
         }
     }
@@ -736,9 +740,10 @@ impl SyscallDispatcher {
             _ => return SyscallResult::Error(SyscallError::InvalidArgument("cap_check needs rights".into())),
         };
         let table = self.caps.lock();
-        match table.check(self.pid, cap_handle, required) {
-            Ok(()) => SyscallResult::Success(1),
-            Err(e) => SyscallResult::Error(SyscallError::CapabilityDenied),
+        if table.check(Pid(self.pid as u32), ResourceType::IpcChannel, cap_handle as u64, required) {
+            SyscallResult::Success(1)
+        } else {
+            SyscallResult::Error(SyscallError::CapabilityDenied)
         }
     }
 
@@ -748,10 +753,8 @@ impl SyscallDispatcher {
             _ => return SyscallResult::Error(SyscallError::InvalidArgument("cap_revoke needs cap_handle".into())),
         };
         let mut table = self.caps.lock();
-        match table.revoke(self.pid, cap_handle) {
-            Ok(()) => SyscallResult::Ok,
-            Err(e) => SyscallResult::Error(SyscallError::ProcessError(format!("{:?}", e))),
-        }
+        table.revoke(CapId(cap_handle));
+        SyscallResult::Ok
     }
 
     // ── Status ───────────────────────────────────────────────────────────────
@@ -781,7 +784,9 @@ mod tests {
     use super::*;
     use crate::capability::CapabilityTable;
     use crate::process::ProcessManager;
-    use crate::ipc::IpcSubsystem;
+    use crate::ipc::{IpcSubsystem, ChannelId};
+use crate::ats1000::Pid;
+use crate::capability::{ResourceType, CapId};
     use crate::vfs::Vfs;
 
     fn setup() -> SyscallDispatcher {

@@ -10,6 +10,7 @@
 //!   5. Chain-ID-Validierung in add_block (9000)
 //!   6. Genesis Signatur-Verifikation
 
+use alloc::format;
 extern crate alloc;
 
 use alloc::collections::BTreeMap;

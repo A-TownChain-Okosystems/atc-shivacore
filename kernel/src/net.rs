@@ -6,6 +6,8 @@
 // Trait-basiert: virtio-net/E1000 in Hardware, LoopbackDevice für Tests.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::format;
+use alloc::vec;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};
@@ -367,7 +369,7 @@ pub enum NetworkError {
 // ─── NetworkStack (Höchste Ebene — verbindet Device + ARP) ──────────────────
 
 pub struct NetworkStack {
-    device: Arc<dyn NetworkDevice>,
+    pub device: Arc<dyn NetworkDevice>,
     arp: ArpTable,
     our_ip: Ipv4Address,
 }

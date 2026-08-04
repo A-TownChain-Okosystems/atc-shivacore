@@ -3,6 +3,7 @@
 // initialisiert einen Linked-List-Allokator darueber, damit `alloc`
 // (Box, Vec, String, ...) im Kernel nutzbar wird.
 
+use alloc::boxed::Box;
 use x86_64::{
     structures::paging::{
         mapper::MapToError, FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB,

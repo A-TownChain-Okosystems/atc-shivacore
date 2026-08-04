@@ -6,6 +6,7 @@
 // Baut auf K12 (Ethernet + ARP + NetworkDevice) auf.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::vec;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};
@@ -267,7 +268,7 @@ impl RoutingTable {
         let mut best: Option<&Route> = None;
         let mut best_len: u8 = 0;
         for route in routes.iter() {
-            if Self::matches(dst, &route.network, route.prefix_len) {
+            if Self::matches(dst, route.network, route.prefix_len) {
                 if route.prefix_len >= best_len {
                     best = Some(route);
                     best_len = route.prefix_len;

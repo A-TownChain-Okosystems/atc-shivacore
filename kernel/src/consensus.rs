@@ -6,6 +6,7 @@
 // Baut auf K6 (DID), K14 (P2P), K15 (Security) auf.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::vec;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};
@@ -45,7 +46,7 @@ impl PohSequence {
 
         let mut input = Vec::with_capacity(40);
         input.extend_from_slice(&*hash);
-        input.extend_from_slice(&*tick.to_be_bytes());
+        input.extend_from_slice(&tick.to_be_bytes());
         let new_hash = crate::security::simple_hash(&input);
 
         let entry = PohEntry {
@@ -67,7 +68,7 @@ impl PohSequence {
 
         let mut input = Vec::with_capacity(72);
         input.extend_from_slice(&*hash);
-        input.extend_from_slice(&*tick.to_be_bytes());
+        input.extend_from_slice(&tick.to_be_bytes());
         input.extend_from_slice(event_hash);
         let new_hash = crate::security::simple_hash(&input);
 
@@ -532,15 +533,16 @@ impl ConsensusEngine {
 
     /// Verarbeitet eine eingehende Stimme eines anderen Validators.
     pub fn handle_vote(&self, vote: Vote) {
-        self.votes.cast_vote(vote);
-        if self.votes.is_final(&vote.vertex_id) {
+        let vote_clone = vote.clone();
+        self.votes.cast_vote(vote_clone.clone());
+        if self.votes.is_final(&vote_clone.vertex_id) {
             self.dag.confirm_vertex(&vote.vertex_id);
         }
     }
 
     /// Wählt den nächsten Proposer.
     pub fn next_proposer(&self) -> Option<String> {
-        self.validators.select_propposer(&self.poh.current_hash())
+        self.validators.select_proposer(&self.poh.current_hash())
     }
 
     /// Fork-Choice: liefert den schweresten Pfad ab Genesis.

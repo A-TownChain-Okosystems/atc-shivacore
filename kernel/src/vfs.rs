@@ -1,3 +1,4 @@
+use alloc::string::ToString;
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 // ─────────────────────────────────────────────────────────────────────────
 // K-Sprint 8 — Virtual File System (VFS)
@@ -5,6 +6,7 @@
 // Capability-gegates VFS mit In-Memory-Backend, Pfad-Aufloesung, File-Handles.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::format;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, String as Str};
 use alloc::vec::Vec;
@@ -168,7 +170,7 @@ fn parent_path(path: &str) -> (String, String) {
     }
     let name = comps.last().unwrap().clone();
     let parent = if comps.len() > 1 {
-        "/" + &comps[..comps.len() - 1].join("/")
+        format!("/{}/", comps[..comps.len()-1].join("/"))
     } else {
         "/".to_string()
     };
@@ -231,7 +233,7 @@ impl Vfs {
 
     fn check_cap(&self, pid: u64, cap_handle: u64, required: Rights) -> bool {
         let table = self.caps.lock();
-        table.check(pid, cap_handle, required).is_ok()
+        table.check(crate::ats1000::Pid(pid as u32), crate::capability::ResourceType::FileSystem, cap_handle as u64, required)
     }
 
     // ── Verzeichnis-Operationen ────────────────────────────────────────────

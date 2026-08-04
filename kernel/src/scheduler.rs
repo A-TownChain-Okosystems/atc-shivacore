@@ -6,6 +6,8 @@
 //! respektiert Deadlines. Hardware wird ueber ein Trait-Interface
 //! abstrahiert — echte Hardware spaeter ohne Algorithmus-Aenderung.
 
+use alloc::vec;
+use alloc::boxed::Box;
 extern crate alloc;
 
 use alloc::collections::BTreeMap;

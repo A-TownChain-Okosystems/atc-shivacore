@@ -6,6 +6,8 @@
 // Trait-basiert: HPET/PIT in Hardware, SimulatedTimerSource für Tests.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::format;
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloc::string::String;

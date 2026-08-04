@@ -12,6 +12,7 @@
 //!   7. Network-Security (Chain-ID, Protocol-Version)
 //!   8. Audit-Trail (vollständiges Logging)
 
+use alloc::format;
 extern crate alloc;
 
 use alloc::collections::BTreeMap;

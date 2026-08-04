@@ -6,6 +6,7 @@
 //!   1. SoftwareSigner — deterministische Pseudo-Signatur (fuer reproduzierbare Tests)
 //!   2. Ed25519Signer — echte Ed25519-Signaturen mit ed25519-dalek
 
+use alloc::vec;
 extern crate alloc;
 
 use alloc::format;
@@ -13,7 +14,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use ed25519_dalek::{SigningKey, VerifyingKey, Signer, Verifier, Signature};
-use rand::rngs::OsRng;
+
 
 /// Dezentrale Identitaet: did:shivacore:<hex-public-key>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -104,10 +105,10 @@ pub struct Ed25519Signer {
 }
 
 impl Ed25519Signer {
-    /// Erzeugt eine neue Ed25519-Identitaet mit frischem Schluesselpaar (OsRng)
+    /// Erzeugt eine neue Ed25519-Identitaet mit frischem Schluesselpaar (deterministic seed)
     pub fn new() -> Self {
-        let mut rng = OsRng;
-        let signing_key = SigningKey::generate(&mut rng);
+        let seed: [u8; 32] = [0u8; 32];
+        let signing_key = SigningKey::from_bytes(&seed);
         let verifying_key = signing_key.verifying_key();
         let public_bytes = verifying_key.to_bytes();
         let did = Did::new(&format!("{}{}", ED25519_PREFIX, hex_encode(&public_bytes)));

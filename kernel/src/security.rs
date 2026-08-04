@@ -6,6 +6,7 @@
 // Baut auf K3a (Capabilities), K6 (DID), K6b (Ed25519), K14 (P2P) auf.
 // ─────────────────────────────────────────────────────────────────────────
 
+use alloc::format;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};

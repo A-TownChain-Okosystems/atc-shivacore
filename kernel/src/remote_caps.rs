@@ -10,6 +10,7 @@
 //! - Delegationsketten: mehrstufige Delegation mit Attenuation
 //! - Constraints: max_operations, deadline, energy_budget
 
+use alloc::vec;
 extern crate alloc;
 
 use alloc::collections::BTreeSet;
