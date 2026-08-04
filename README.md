@@ -618,3 +618,14 @@ Der Kernel ist jetzt nicht nur ein OS, sondern ein Blockchain-OS.
 **133/133 Tests gesamt gruen**
 
 ats1000 Trait Status: ProcessManager DONE, MemoryManager DONE, FileSystem DONE, NetworkStack STUB
+
+## K-Sprint 8 Update: Heap-Bridge Integration (04.08.2026)
+
+MemoryManager vollstaendig mit allocator.rs integriert:
+
+- **Heap-Bridge**: AllocSource (KernelHeap/UserspaceBump), echte alloc::alloc/dealloc
+- **MemorySubsystem**: L0 (Heap) + L1 (Regions) + Caps in einem Struct
+- **Konstanten-Sync**: HEAP_START/SIZE identisch zu allocator.rs
+- **validate_heap_config()**: Boot-Time Validierung
+- **Routing**: <= 4KB -> Kernel-Heap, > 4KB -> Userspace-Bump
+- **28 MemMgr Tests** (18 neue), Gesamt: 151/151 gruen
