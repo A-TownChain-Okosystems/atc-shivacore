@@ -43,6 +43,7 @@ mod blockchain;
 mod vm;
 mod contract;
 mod ai;
+mod kernel_init;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
