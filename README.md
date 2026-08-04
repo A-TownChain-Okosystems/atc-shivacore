@@ -974,3 +974,21 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
   - Snapshot (complete state query)
 
 **Tests:** 84 → 1748 gesamt (1664 + 84)
+
+## K-Sprint 46: Kernel Tracing & Profiling (04.08.2026)
+
+**Modul:** `tracing.rs` (2254 Zeilen, 75 Tests)
+
+**Implementiert:**
+- `TraceCategory` — 11 Kategorien (Function, Syscall, Irq, Sched, Mem, Net, Block, Signal, Container, User, Custom)
+- `TraceEvent` — Seq, Timestamp, CPU, PID, Category, EventType, Name, 3 Args, Duration
+- `RingBuffer` — Lock-free Circular Buffer mit Overflow-Tracking, Category/PID/CPU/Time-Range Filter
+- `TraceFilter` — Category, PID, CPU, Name-Substring, Min-Duration Filter
+- `Histogram` — Custom Bucket Boundaries, Mean, P50/P95/P99 Percentiles, Report
+- `FunctionTracer` — Per-CPU Call Stack, Enter/Exit, Call Counts, Total/Avg Time, Top-N
+- `SyscallTracer` — strace Equivalent, PID/Syscall Filter, Error Tracking, Summary Report
+- `Profiler` — perf Equivalent, Sample Period, PID Filter, Kernel/User Mode, Hot Functions, Report
+- `LatencyTracker` — Per-Name Histograms, Worst Case, Alert Threshold, Alert Queue
+- `TraceManager` — Top-Level Orchestrator, Enable/Disable All, Report Generation
+
+**Tests: 1823 gesamt** (1748 + 75 neue)
