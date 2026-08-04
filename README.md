@@ -629,3 +629,15 @@ MemoryManager vollstaendig mit allocator.rs integriert:
 - **validate_heap_config()**: Boot-Time Validierung
 - **Routing**: <= 4KB -> Kernel-Heap, > 4KB -> Userspace-Bump
 - **28 MemMgr Tests** (18 neue), Gesamt: 151/151 gruen
+
+## K-Sprint 22: MemoryManager <-> allocator.rs Integration (04.08.2026)
+
+- **ats1000.rs**: Alle 4 Traits als DONE markiert (keine Stubs mehr)
+- **kernel_init.rs**: KernelState::boot() — vereinigte Init-Sequenz (L0-L10)
+  - BootPhase enum, InitStatus tracking, boot_log(), smoke_test()
+  - validate_integration(): allocator.rs <-> memory_manager.rs Konsistenz
+  - 11 Tests
+
+**162/162 Tests gesamt gruen**
+ats1000 Trait Status: ProcessManager DONE, MemoryManager DONE, FileSystem DONE, NetworkStack DONE
+KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
