@@ -948,3 +948,29 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
   - `oom_kill` — OOM Killer (größter Speicherverbraucher terminieren)
 
 **Tests:** 78 → 1664 gesamt (1586 + 78)
+
+## K-Sprint 45: Copy-on-Write Fork Engine (04.08.2026)
+
+**Modul:** `cow.rs` (1484 Zeilen, 84 Tests)
+
+**Implementiert:**
+- `CowPage` — Per-Frame Sharing-State (ref_count, sharers list, origin_pid, content_hash for KSM)
+- `CowRegion` — Contiguous CoW-Region mit Progress-Tracking (pages_copied/shared/fully_broken)
+- `PageMapping` — Per-Process VPage→Frame Mapping mit CoW-Flag, dirty/accessed, region_id
+- `ProcessPageTable` — Per-Process Page Table (mappings, parent_pid, children, fork_tick)
+- `TlbFlushQueue` — Batched TLB Invalidation (up to 64 entries, batched flush stats)
+- `KsmScan` — Kernel Same-Page Merging (content hash dedup, scan_id, merge tracking)
+- `CowManager` — Full CoW Engine:
+  - `fork()` — Writable pages → CoW, read-only → shared, ref_count tracking
+  - `handle_cow_fault()` — Write fault → copy page, update ref_count, auto-break last sharer
+  - `break_cow_page()` / `break_all_cow()` — Explicit CoW breaking
+  - `fork_into_container()` — Container-scoped CoW fork
+  - `ksm_scan()` — Dedup identical pages by content hash
+  - Process tree (parent/children/descendants/tree depth)
+  - Region management (progress, active/broken, pages_copied/shared)
+  - TLB batched flush
+  - Audit trail (13 event types, per-process filter)
+  - Statistics (forks, faults, breaks, KSM merges, max_sharers, averages)
+  - Snapshot (complete state query)
+
+**Tests:** 84 → 1748 gesamt (1664 + 84)

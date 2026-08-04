@@ -65,3 +65,4 @@ pub mod container;
 pub mod signals;
 pub mod smp;
 pub mod vmm;
+pub mod cow;
