@@ -46,6 +46,7 @@ mod ai;
 mod kernel_init;
 mod cross_subsystem;
 mod atcnet;
+mod genesis;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
