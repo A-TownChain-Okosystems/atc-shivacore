@@ -868,3 +868,29 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - `ContainerError` — 12 Error-Typen (NotFound/AlreadyExists/NotRunning/SyscallBlocked/etc.)
 
 **Tests:** 101 → 1405 gesamt (1304 + 101)
+
+## K-Sprint 42: Advanced Signal Handling + POSIX Real-Time Signals (04.08.2026)
+
+**Modul:** `signals.rs` (2249 Zeilen, 82 Tests)
+
+**Implementiert:**
+- `FullSignal` — 63 POSIX-Signale (31 Standard + 32 Real-Time), mit Name, Default-Action, Priority
+- `SignalMask` — 64-Bit Bitmask für alle Signale, Add/Remove/Contains/Union/Intersection/Difference
+- `SignalInfo` — siginfo_t-äquivalent mit Sender, Code, Value, Timestamp
+- `SignalCode` — 13 Signal-Quellen (User/Kernel/Timer/Queue/Io/Fault/Child/etc.)
+- `SignalDisposition` — Default/Ignore/Catch mit Handler-Flags (SA_RESTART, SA_ONSTACK, SA_SIGINFO, etc.)
+- `AltStack` — sigaltstack mit Größen-Validierung (4KB–1MB), Enable/Disable
+- `IntervalTimer` — ITIMER_REAL/VIRTUAL/PROF mit Tick-Logik, Overrun-Counter, One-Shot/Repeating
+- `ProcessSignalState` — Per-Process: Dispositions, Blocked-Mask, Pending-Queue, AltStack, 3 Timers
+- `AdvancedSignalManager` — Full Signal Runtime:
+  - `send_to_process()` — mit Standard-Coalescing (verschmelzen) vs RT-Queuing
+  - `send_to_group()` — killpg-Äquivalent (Prozessgruppen-Signale)
+  - `send_to_container()` — Container-Signal-Forwarding
+  - `broadcast()` — An alle Prozesse außer Sender
+  - `deliver()` — Prioritätsbasierte Delivery (SIGKILL > SIGSTOP > SIGSEGV > SIGTERM > ...)
+  - `return_from_handler()` — Restore saved mask
+  - Handler/Mask/AltStack/Timer Management
+  - Signal Audit Log (alle Sendungen protokolliert)
+  - Statistics (sent/delivered/coalesced/dropped)
+
+**Tests:** 82 → 1487 gesamt (1405 + 82)
