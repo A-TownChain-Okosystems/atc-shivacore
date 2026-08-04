@@ -27,6 +27,8 @@ mod ipc;
 mod did;
 mod remote_caps;
 mod knowledge_graph;
+mod memory_manager;
+mod atcfs;
 mod vfs;
 mod syscall;
 mod timer;
