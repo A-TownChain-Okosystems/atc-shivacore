@@ -70,3 +70,4 @@ pub mod tracing;
 pub mod container_net;
 pub mod lkm;
 pub mod module_security;
+pub mod fs_journal;

@@ -1050,3 +1050,25 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
   - Stats (requests/passed/blocked/revoked)
 
 **Tests:** 65 → 2091 gesamt (2026 + 65)
+
+## K-Sprint 50: Filesystem Journaling (04.08.2026)
+
+**Modul:** `fs_journal.rs` (1161 Zeilen, 55 Tests)
+
+**Implementiert:**
+- `JournalOp` — 12 Operationen (Create, Write, Delete, Rename, Truncate, Chmod, Chown, Mkdir, Rmdir, Link, Symlink, Sync)
+- `JournalEntry` — Write-Ahead Log Entry mit Seq, TX-ID, Op, Path, Data, Offset
+- `JournalTransaction` — Atomare Transaktions-Gruppierung (Open→Committed→Applied)
+- `Journal` — Core Write-Ahead Journal:
+  - `begin_tx()` / `commit_tx()` / `abort_tx()`
+  - `log()` / `log_with_data()` / `log_rename()`
+  - `checkpoint()` — Journal-Compaction
+  - `recover()` — Crash-Recovery (replay committed, abort open)
+  - `needs_checkpoint()` — Auto-Compaction Threshold
+- `JournalManager` — Higher-Level API:
+  - `create()` / `write()` / `delete()` / `rename()` / `mkdir()` / `rmdir()`
+  - `truncate()` / `chmod()` / `chown()` / `link()` / `symlink()` / `sync()`
+  - Auto-Checkpoint mit konfigurierbarem Threshold
+  - `recover()` — Crash-Recovery
+
+**Tests:** 55 → 2146 gesamt (2091 + 55)
