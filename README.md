@@ -754,3 +754,16 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 - spawn → register signals + add scheduler, kill → unregister + exit all, timer_tick → signal delivery + preemption
 - 48 Tests
 - **894/894 Tests gesamt gruen** (846 + 48)
+## K-Sprint 34: File Descriptor Table + User I/O (04.08.2026)
+
+- **user_io.rs**: Per-Process File Descriptor Table, Pipes, Poll/Select
+- FdTable: 256 FDs per process, stdin/stdout/stderr pre-allocated (FD 0/1/2)
+- FdFlags (r/w/append/nonblock/cloexec), FdTarget (File/Pipe/Stdio/Socket/Null)
+- alloc/close/close_all/dup/dup2/seek/check_access, slot reuse after close
+- Anonymous Pipe: 64 KiB buffer, write/read/EOF, SIGPIPE (no reader → 0 bytes)
+- PipeManager: create_pipe, pipe() same process, pipe_between() cross-process IPC
+- Poll/Select: PollEvent (Readable/Writable/Error/Hangup), poll() for multiple FDs
+- UserIoManager: integrates FdTable + Pipes, register/unregister, open/close/read/write
+- Statistics: total reads/writes/opens/closes, process_count, pipe_count
+- 62 Tests
+- **956/956 Tests gesamt gruen** (894 + 62)
