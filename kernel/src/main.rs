@@ -10,10 +10,6 @@
 #![feature(abi_x86_interrupt)]
 #![feature(alloc_error_handler)]
 #![no_main]
-#![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
-#![allow(unused_mut)]
 
 extern crate alloc;
 
@@ -24,36 +20,6 @@ mod gdt;
 mod interrupts;
 mod memory;
 mod serial;
-mod capability;
-mod process;
-mod scheduler;
-mod ipc;
-mod did;
-mod remote_caps;
-mod knowledge_graph;
-mod memory_manager;
-mod atcfs;
-mod vfs;
-mod syscall;
-mod timer;
-mod block;
-mod net;
-mod tcpip;
-mod p2p;
-mod security;
-mod consensus;
-mod mempool;
-mod blockchain;
-mod vm;
-mod contract;
-mod ai;
-mod kernel_init;
-mod cross_subsystem;
-mod atcnet;
-mod genesis;
-mod genesis_bridge;
-mod gossip_bridge;
-mod security_audit;
 
 use alloc::{boxed::Box, vec::Vec};
 use bootloader_api::{
@@ -113,37 +79,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     serial_println!("ShivaCore: Vec-Test -- Summe 0..10: {}", vec.iter().sum::<i32>());
 
     println!("K-Sprint 2: Paging/Heap OK (Box+Vec getestet)");
-
-    // ── K-Sprint 23: Vollständige Kernel-Init aller Subsysteme ──
-    serial_println!("ShivaCore: Starte Kernel-Init (K-Sprint 23)...");
-    
-    match kernel_init::KernelState::boot() {
-        Ok(ks) => {
-            serial_println!("ShivaCore: Kernel-Init erfolgreich!");
-            for (phase, status) in &ks.init_log {
-                let icon = match status {
-                    kernel_init::InitStatus::Ready => "OK",
-                    kernel_init::InitStatus::Initializing => "..",
-                    kernel_init::InitStatus::Failed => "FAIL",
-                    kernel_init::InitStatus::NotStarted => "--",
-                };
-                serial_println!("  [{}] {}", icon, phase.label());
-            }
-            serial_println!("ShivaCore: {} Module aktiv", kernel_init::kernel_version());
-            serial_println!("ShivaCore: P2P port {}, Chain height {}, VM contracts: {}",
-                ks.p2p.listen_port(),
-                ks.chain.current_height(),
-                ks.vm.contract_count());
-            serial_println!("ShivaCore: Boot Complete. Uebergabe an Idle-Loop.");
-        }
-        Err(e) => {
-            serial_println!("ShivaCore: KERNEL-INIT FEHLGESCHLAGEN: {:?}", e);
-            panic!("Kernel init failed");
-        }
-    }
-
-    println!("K-Sprint 23: Kernel-Init Complete (alle Subsysteme aktiv)");
-    serial_println!("ShivaCore: K-Sprint 23 abgeschlossen. Uebergabe an Idle-Loop.");
+    serial_println!("ShivaCore: K-Sprint 2 abgeschlossen. Uebergabe an Idle-Loop.");
 
     loop {
         x86_64::instructions::hlt();

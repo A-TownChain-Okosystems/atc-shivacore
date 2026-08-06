@@ -3,7 +3,6 @@
 // initialisiert einen Linked-List-Allokator darueber, damit `alloc`
 // (Box, Vec, String, ...) im Kernel nutzbar wird.
 
-use alloc::boxed::Box;
 use x86_64::{
     structures::paging::{
         mapper::MapToError, FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB,
@@ -14,7 +13,7 @@ use x86_64::{
 pub const HEAP_START: usize = 0x_4444_4444_0000;
 pub const HEAP_SIZE: usize = 100 * 1024; // 100 KiB fuer K-Sprint 2
 
-#[cfg_attr(not(test), global_allocator)]
+#[global_allocator]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 
 pub fn init_heap(
