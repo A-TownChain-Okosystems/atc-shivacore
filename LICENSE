@@ -1,17 +1,22 @@
-Apache License
-Version 2.0, January 2004
-http://www.apache.org/licenses/
+Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems.
+All Rights Reserved.
 
-Copyright 2026 A-TownChain-Okosystems / Michael Wroblewski
+Unauthorized copying, modification, distribution, or use of this software,
+via any medium, is strictly prohibited without prior written consent
+from the copyright holder.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+This software and its source code are proprietary and confidential.
+No license is granted to use, copy, modify, merge, publish, distribute,
+sublicense, or sell copies of this software without explicit
+written permission from Michael Wroblewski / ShivaCore / A-TownChain-Okosystems.
 
-    http://www.apache.org/licenses/LICENSE-2.0
+For licensing inquiries, contact: ShivaCore
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+---
+
+A-TownChain, KAI-OS, ShivaOS, ShivaMon, ATCLang, ATC-8300, ATC-9000,
+ShivaConsensus, ATCNet, ATCFS, and all related standards (ATC-01 through ATC-37)
+are proprietary technology of Michael Wroblewski / ShivaCore / A-TownChain-Okosystems.
+
+This project is built entirely from scratch. No POSIX-based cloning or
+external ecosystem forks are used. All components are original works.
