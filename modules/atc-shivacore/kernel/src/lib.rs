@@ -36,6 +36,7 @@ pub mod timer;
 // [K29-Build] ausgeschlossen: pub mod block;
 pub mod tcpip;
 pub mod p2p;
+pub mod p2p_secure; // [K14-Upgrade] ATC-PROTO-P2P-001 v1.0.0 (SCR-0028)
 pub mod security;
 pub mod mempool;
 pub mod vm;
