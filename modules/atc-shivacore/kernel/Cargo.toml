@@ -34,7 +34,7 @@ pc-keyboard = { version = "0.7", optional = true }
 lazy_static = { version = "1.5", features = ["spin_no_std"] }
 linked_list_allocator = "0.10"
 noto-sans-mono-bitmap = { version = "0.2", default-features = false, features = ["regular", "size_16"], optional = true }
-rand = { version = "0.8", default-features = false }
+rand = { version = "0.10", default-features = false }
 ed25519-dalek = { version = "2.1", default-features = false, features = ["alloc"] }
 libm = "0.2"
 
