@@ -1,10 +1,13 @@
-# atc-shivacore — REBUILD
+# atc-shivacore [L1]
 
-ShivaCore Microkernel — Neuaufbau folgt der Reihenfolge SC-001 (Kernel Object Model) bis SC-013 gem. AD-013. Die K29-Implementierung (674 Tests, Chain-ID 658467) liegt im Vault und in der Git-Historie.
+ShivaCore Microkernel — Rust, Capability-basiert, K29-Stand (AD-012/013).
 
-**Gesamtinhalt vor dem Abbau** (byte-identisch verifiziert am 06.09.2026):
-im Wiki-Vault unter
-[a-townchain-os-docs/docs/archive/monorepo-full/](https://github.com/A-TownChain-Okosystems/a-townchain-os-docs/tree/main/docs/archive/monorepo-full)
+**Vault-Restauration (07.09.2026, AD-020/026/027):** Inhalt aus dem Wiki-Vault
+(docs/archive/monorepo-full/) restauriert — vor der Repo-Leerung byte-identisch gesichert. Chain-ID 658467 bereits im Vault-Stand (0 Alt-Reste, verifiziert).
 
-Die Git-Historie dieses Repos enthält jede Datei weiterhin (Reversibilität).
-Rebuild-Stand: atclang abgeschlossen (AD-019, Phase 1). Siehe DECISIONS_REGISTER AD-018/AD-020.
+**Module:** atc-shivacore, atc-shivacore-tools
+
+**Meile (AD-027):** M2 — Kernel laeuft: cargo test 674/674 + KernelState::boot() L0-L10 (Test-Verifikation im Rebuild-Lauf)
+
+**Hinweis:** Basis fuer den Rebuild; Gate-Kriterien laut LAUFFAEHIGKEITS_ROADMAP
+(a-townchain-os-docs/docs/roadmap/).
