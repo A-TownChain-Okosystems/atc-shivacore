@@ -47,7 +47,7 @@ impl PohSequence {
         let mut input = Vec::with_capacity(40);
         input.extend_from_slice(&*hash);
         input.extend_from_slice(&tick.to_be_bytes());
-        let new_hash = crate::security::simple_hash(&input);
+        let new_hash = shivacore::security::simple_hash(&input);
 
         let entry = PohEntry {
             hash: new_hash,
@@ -70,7 +70,7 @@ impl PohSequence {
         input.extend_from_slice(&*hash);
         input.extend_from_slice(&tick.to_be_bytes());
         input.extend_from_slice(event_hash);
-        let new_hash = crate::security::simple_hash(&input);
+        let new_hash = shivacore::security::simple_hash(&input);
 
         let entry = PohEntry {
             hash: new_hash,
@@ -95,7 +95,7 @@ impl PohSequence {
             let mut input = Vec::with_capacity(40);
             input.extend_from_slice(&expected);
             input.extend_from_slice(&entry.tick.to_be_bytes());
-            let computed = crate::security::simple_hash(&input);
+            let computed = shivacore::security::simple_hash(&input);
             if computed != entry.hash { return false; }
             expected = entry.hash;
         }
@@ -144,7 +144,7 @@ impl DagVertex {
         input.extend_from_slice(&payload_hash);
         for p in &parents { input.extend_from_slice(p); }
         input.extend_from_slice(creator_did.as_bytes());
-        let id = crate::security::simple_hash(&input);
+        let id = shivacore::security::simple_hash(&input);
 
         DagVertex {
             id, vertex_type, parents, creator_did,
@@ -283,7 +283,7 @@ impl Dag {
         for t in tips.iter() {
             input.extend_from_slice(t);
         }
-        crate::security::simple_hash(&input)
+        shivacore::security::simple_hash(&input)
     }
 }
 
@@ -349,7 +349,7 @@ impl ValidatorRegistry {
         let total = *self.total_stake.lock();
         let mut input = poh_hash.to_vec();
         let hash_val = u64::from_be_bytes(
-            crate::security::simple_hash(&input)[..8].try_into().unwrap()
+            shivacore::security::simple_hash(&input)[..8].try_into().unwrap()
         );
         let target = hash_val % total;
 
@@ -956,6 +956,6 @@ mod tests {
 
     #[test]
     fn test_chain_id_constant() {
-        assert_eq!(crate::p2p::CHAIN_ID, 658467);
+        assert_eq!(shivacore::p2p::CHAIN_ID, 658467);
     }
 }

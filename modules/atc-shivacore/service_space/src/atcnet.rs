@@ -708,7 +708,7 @@ pub struct AtcNetStats {
 
 // === ats1000 NetworkStack Trait Implementation === //
 
-use crate::ats1000::NetworkStack;
+use shivacore::ats1000::NetworkStack;
 
 impl NetworkStack for AtcNetHandler {
     fn connect(&mut self, peer_node_id: &[u8; 32]) -> Option<u64> {

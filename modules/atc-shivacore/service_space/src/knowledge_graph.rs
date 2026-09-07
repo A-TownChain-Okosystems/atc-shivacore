@@ -22,7 +22,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use crate::capability::{CapabilityTable, CapId, Pid, ResourceType, Rights};
+use shivacore::capability::{CapabilityTable, CapId, Pid, ResourceType, Rights};
 
 /// Eindeutige Entity-ID im Knowledge Graph
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

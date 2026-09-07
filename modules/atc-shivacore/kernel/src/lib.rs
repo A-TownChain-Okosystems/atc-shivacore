@@ -20,36 +20,29 @@ pub mod ats1000;
 // [K29-Build] ausgeschlossen: pub mod interrupts;
 // [K29-Build] ausgeschlossen: pub mod memory;
 // [K29-Build] ausgeschlossen: pub mod serial;
+pub mod net; // [K12] Netz-Primitive (HAL-Ebene) — verbleibt im Kernel (AD-028-Justierung)
+// [AD-028] Service-Space-Migration: blockchain, consensus, genesis, genesis_bridge,
+// gossip_bridge, atcnet, net, did, remote_caps, knowledge_graph, security_audit
+// sind in den Service-Space-Crate (service_space/) migriert — Kernel haelt nur Primitive.
 pub mod capability;
 pub mod process;
 pub mod scheduler;
 pub mod ipc;
-pub mod did;
-pub mod remote_caps;
-pub mod knowledge_graph;
 pub mod memory_manager;
 pub mod atcfs;
 pub mod vfs;
 // [K29-Build] ausgeschlossen: pub mod syscall;
 pub mod timer;
 // [K29-Build] ausgeschlossen: pub mod block;
-pub mod net;
 pub mod tcpip;
 pub mod p2p;
 pub mod security;
-pub mod consensus;
 pub mod mempool;
-pub mod blockchain;
 pub mod vm;
 pub mod contract;
 pub mod ai;
 pub mod kernel_init;
 pub mod cross_subsystem;
-pub mod atcnet;
-pub mod genesis;
-pub mod genesis_bridge;
-pub mod gossip_bridge;
-pub mod security_audit;
 // [K29-Build] ausgeschlossen: pub mod userspace;
 // [K29-Build] ausgeschlossen: pub mod elf_loader;
 // [K29-Build] ausgeschlossen: pub mod page_fault;

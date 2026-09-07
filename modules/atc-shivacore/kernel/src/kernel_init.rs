@@ -41,14 +41,11 @@ use crate::scheduler::DaHeftScheduler;
 use crate::ipc::IpcSubsystem;
 use crate::p2p::P2pNode;
 use crate::security::SecurityManager;
-use crate::consensus::ConsensusEngine;
 use crate::mempool::{MemoryPool, StateDb, TxValidator, NonceTracker};
-use crate::blockchain::BlockChain;
 use crate::vm::VmEngine;
 use crate::contract::ContractExecutor;
 use crate::ai::AiEngine;
 use crate::timer::{SimulatedTimerSource, MonotonicClock, TimerManager};
-use crate::did::Did;
 
 /// Kernel-Init-Status für jedes Subsystem
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +68,7 @@ pub enum BootPhase {
     FileSystem,       // L6: ATCFS + VFS
     Network,         // L7: P2P Network
     Security,        // L8: Security/Audit/MultiSig
-    Blockchain,      // L9: Consensus/Chain/Mempool/VM
+    Blockchain,      // L9: Mempool/VM/Contracts (Consensus+Chain -> Service Space)
     Ai,              // L10: AI Subsystem
     Done,
 }
@@ -88,7 +85,7 @@ impl BootPhase {
             BootPhase::FileSystem => "L6 ATCFS + VFS",
             BootPhase::Network => "L7 P2P Network (ATCNet)",
             BootPhase::Security => "L8 Security/Audit/MultiSig",
-            BootPhase::Blockchain => "L9 Consensus/Chain/Mempool/VM",
+            BootPhase::Blockchain => "L9 Mempool + Contract VM",
             BootPhase::Ai => "L10 AI Subsystem (Aurora AI)",
             BootPhase::Done => "Boot Complete",
         }
@@ -114,13 +111,11 @@ pub struct KernelState {
     pub p2p: P2pNode,
     // L8: Security
     pub security: SecurityManager,
-    // L9: Blockchain stack
-    pub consensus: ConsensusEngine,
+    // L9: Contract-Stack (Consensus/Chain -> Service Space, AD-028)
     pub mempool: Arc<MemoryPool>,
     pub state_db: Arc<StateDb>,
     pub tx_validator: Arc<TxValidator>,
     pub nonces: Arc<NonceTracker>,
-    pub chain: Arc<BlockChain>,
     pub vm: Arc<VmEngine>,
     pub contracts: ContractExecutor,
     // L10: AI
@@ -194,14 +189,10 @@ impl KernelState {
 
         // ── L9: Blockchain Stack (Consensus + Mempool + Chain + VM + Contracts) ──
         log.push((BootPhase::Blockchain, InitStatus::Initializing));
-        let genesis_hash = [0u8; 32]; // Genesis hash — wird durch GenesisBridge gesetzt
-        let consensus = ConsensusEngine::new(our_did.clone(), genesis_hash);
-
         let mempool = Arc::new(MemoryPool::new(10000, 300));
         let state_db = Arc::new(StateDb::new());
         let nonces = Arc::new(NonceTracker::new());
         let tx_validator = Arc::new(TxValidator::new(state_db.clone(), nonces.clone(), 1));
-        let chain = Arc::new(BlockChain::new());
         let vm = Arc::new(VmEngine::new(1_000_000));
         let contracts = ContractExecutor::new(vm.clone(), state_db.clone());
         log.push((BootPhase::Blockchain, InitStatus::Ready));
@@ -223,12 +214,10 @@ impl KernelState {
             vfs,
             p2p,
             security,
-            consensus,
             mempool,
             state_db,
             tx_validator,
             nonces,
-            chain,
             vm,
             contracts,
             ai,
@@ -257,8 +246,6 @@ impl KernelState {
             self.p2p.peer_count()));
         out.push_str(&format!("  Mempool: {}/{} txs\n",
             self.mempool.count(), 10000));
-        out.push_str(&format!("  Chain: height {}\n",
-            self.chain.current_height()));
         out.push_str(&format!("  VM: {} contracts\n",
             self.vm.contract_count()));
         out.push_str(&format!("  AI: {} models\n",
@@ -340,7 +327,6 @@ mod tests {
         assert!(log.contains("ATCFS"));
         assert!(log.contains("P2P"));
         assert!(log.contains("Mempool"));
-        assert!(log.contains("Chain"));
         assert!(log.contains("VM"));
         assert!(log.contains("AI"));
         assert!(log.contains("Boot Complete"));
@@ -391,9 +377,8 @@ mod tests {
     }
 
     #[test]
-    fn test_blockchain_initialized() {
+    fn test_contracts_stack_initialized() {
         let state = KernelState::boot().unwrap();
-        assert_eq!(state.chain.current_height(), 0);
         assert_eq!(state.mempool.count(), 0);
         assert_eq!(state.vm.contract_count(), 0);
     }

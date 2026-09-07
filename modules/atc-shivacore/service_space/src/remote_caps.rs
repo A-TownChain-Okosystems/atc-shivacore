@@ -19,7 +19,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use crate::capability::Rights;
+use shivacore::capability::Rights;
 use crate::did::{Did, CryptoProvider};
 
 /// Fehler bei Ticket-Operationen
