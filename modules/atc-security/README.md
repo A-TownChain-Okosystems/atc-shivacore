@@ -12,7 +12,7 @@ Security-Tools für das A-TownChain-Ökosystem.
 - Bug-Bounty-Integration (Reward-Management)
 
 ## Architektur
-```
+```text
 atc-security/
 ├── src/
 │   ├── lib.rs
@@ -26,7 +26,7 @@ atc-security/
 
 
 ## Abhängigkeiten
-- [`A-TownChain-Okosystems/atc-shivacore`](https://github.com/A-TownChain-Okosystems/a-townchain-os/tree/main/src/modules/atc-shivacore)
+- [`A-TownChain-Okosystems/atc-shivacore`](../a-townchain-os/src/modules/atc-shivacore)
 
 ## Copyright
 Copyright © Michael Wroblewski / A-TownChain-Okosystems. All Rights Reserved.

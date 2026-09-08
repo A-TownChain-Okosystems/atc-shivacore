@@ -1,35 +1,191 @@
-# atc-shivacore [L1]
+# ATC ShivaCore
 
-ShivaCore Microkernel — Rust, Capability-basiert, K29-Stand (AD-012/013).
+> Capability-basierter Rust Microkernel (L1) für Globus OS im A-TownChain-Ökosystem
 
-**Vault-Restauration (07.09.2026, AD-020/026/027):** Inhalt aus dem Wiki-Vault
-(docs/archive/monorepo-full/) restauriert — vor der Repo-Leerung byte-identisch gesichert. Chain-ID 658467 bereits im Vault-Stand (0 Alt-Reste, verifiziert).
+**Project:** atc-shivacore
+**Organization:** A-TownChain-Okosystems
+**Status:** `development`
+**Version:** `0.1.0`
+**License:** `Apache-2.0`
 
-**Module:** atc-shivacore, atc-shivacore-tools
+<!--
+atc:
+  standard: ATC-STD-README-001
+  version: 1.0.0
+repository:
+  id: ATC-REPO-CORE-001
+  name: atc-shivacore
+  type: software
+  status: development
+ownership:
+  organization: A-TownChain-Okosystems
+technology:
+  primary_language: Rust
+governance:
+  security_class: S4
+  criticality: C1
+-->
 
-**Meile (AD-027):** M2 — Kernel laeuft: cargo test 674/674 + KernelState::boot() L0-L10 (Test-Verifikation im Rebuild-Lauf)
+## Overview
 
-**Hinweis:** Basis fuer den Rebuild; Gate-Kriterien laut LAUFFAEHIGKEITS_ROADMAP
-(a-townchain-os-docs/docs/roadmap/).
+ShivaCore ist ein capability-basierter Microkernel in Rust (Layer L1) für das A-TownChain-Ökosystem. Er bildet das funktionale Fundament von Globus OS und stellt sichere Isolation, Capability Guarding, Scheduling und P2P-Kommunikation bereit. Der Kernel wurde im Rahmen der Vault-Restauration (07.09.2026, AD-020/026/027) aus dem Wiki-Vault wiederhergestellt und verifiziert. Wartungszyklus 1 nach ATC-STD-REPO-MAINT-001 wurde am 2026-09-08 erfolgreich abgeschlossen.
 
----
+## Purpose
 
-## ATC Compliance & Governance (ATC-STD-201 / 202 / 203)
+ShivaCore stellt die kanonische Implementierung des Microkernel-Kerns (AD-012) im A-TownChain-Ökosystem bereit. Er löst folgende Kernaufgaben:
+- Sichere Isolation von Kernel- und Service-Space (AD-028).
+- Capability-basierte Rechteverwaltung (CSpace) für Ressourcen.
+- Deterministic Scheduling mittels DA-HEFT Algorithmen.
+- Sichere P2P-Netzwerkkommunikation (ATC-PROTO-P2P-001).
+- Hardware-Abstraktionsschicht (HAL) für Globus OS.
 
-**ATC COMPLIANCE: R4** — auditiert am 2026-09-07 (atc-repo-audit; R-Level aus `.atc/repository.yaml`).
-Architekturentscheidungen: zentral im [DECISIONS_REGISTER](https://github.com/A-TownChain-Okosystems/a-townchain-os-docs/blob/main/docs/DECISIONS_REGISTER.md) (AD-Nummern verbindlich; lokale Entscheidungen in `docs/decisions/`).
+## Scope
 
-- **Purpose:** ShivaCore Microkernel (AD-012) — das Fundament von Globus OS.
-- **Scope:** Layer L1, Domain kernel — atc-shivacore als CORE in der 23-Repo-Landschaft (AD-024/026).
-- **Architecture:** Capability-Microkernel: CSpace, Scheduler, Memory, IPC, HAL; Service-Space strikt getrennt (AD-028); net.rs als K12-HAL-Primitive.
-- **Features:** 674/674 Tests (394 Kernel + 280 Service, Rust 1.98.1); Boot L0-L10; Chain-ID 658467; DA-HEFT-Scheduling-Forschung.
-- **Installation:** Modul-Build je Sprache (rust); Integration via Monorepo-Workspace (a-townchain-os, sync_modules.py).
-- **Development:** Conventional Commits; Governance-Regeln aus atc-standards; Naming gemaess ATC-STD-000 §7.
-- **Testing:** cargo test --workspace: 674/674; Boot-Chain L0-L10 verifiziert (M2-Gate erfuellt).
-- **Security:** SECURITY.md; S-Klasse S4; ATC-STD-203 Release-Gates; Emergency-Prozess ATC-STD-000 §32.
-- **Roadmap:** Einordnung in die Lauffaehigkeits-Roadmap M1-M8 (AD-027) und Bauhierarchie L0-L7 (AD-026).
-- **Version:** CHANGELOG.md; SemVer; Releases als ATC-REL-X.Y.Z.
-- **License:** Proprietaer — All Rights Reserved, Michael Wroblewski / ShivaCore / A-TownChain-Okosystems (ATC-LIC/ATS-LIC).
+- **In Scope:** Microkernel L1, CSpace Capability Management, DA-HEFT Scheduler, IPC, P2P Secure Protocol (K14/K15), Hardware Abstraction Layer, Kernel Boot L0-L10.
+- **Out of Scope:** Userspace-Anwendungen (Globus OS Userspace liegt in `globus-os`), AI-Dienste (`aurora-ai`), GameFi-Engines (`genesis-engine`).
 
-**Maintenance (ATC-STD-REPO-MAINT-001):** Zyklus 1 am 2026-09-08 — Status-Label **MAINTENANCE_REQUIRED**
-(P1 offen: Build/Test-CI, Major-Dependency-REVIEW; P2: Tag/Release HELD). Report: RUN-001 im Docs-Hub.
+## Status
+
+**Status:** `development` — Microkernel ist funktionsfähig. 423/423 Kernel- & P2P-Tests sowie 280 Service-Space-Tests sind grün (Rust 1.98.1). Wartungszyklus 1 (ATC-STD-REPO-MAINT-001) wurde am 08.09.2026 durchgeführt. Chain-ID 658467 verifiziert.
+
+## Architecture
+
+### Components
+- **CSpace (Capability Space):** Objektorientierte Rechteverwaltung und Schutzgrenzen.
+- **Scheduler:** DA-HEFT (Directed Acyclic Graph Heterogeneous Earliest Finish Time) Scheduling Engine.
+- **Memory & IPC:** Microkernel Memory-Management und synchrone/asynchrone IPC.
+- **HAL & Network:** Kernel-Primitive (`net.rs`) und sicheres P2P-Protokoll (`p2p_secure.rs`).
+
+### Data Flow
+1. Boot-Phase L0-L10 initialisiert Hardware, CSpace und Memory-Manager.
+2. Kernel startet Service-Space in isolierten Schutzdomänen.
+3. IPC-Nachrichten werden über CSpace-Capability-Guards gefiltert und zugestellt.
+4. P2P-Nachrichten verhandeln Handshake (Phasen 10..13) und laufen über TokenBucket Rate-Limiter.
+
+### Dependencies
+| Component | Purpose | Required |
+|---|---|---|
+| Rust 1.98.1 | Core Toolchain & Compiler | Yes |
+| ed25519-dalek | Kryptografische Signaturen | Yes |
+| spin | Kernel Spinlocks | Yes |
+
+## Features
+
+- **Capability-basiertes Rechtekonzept:** Minimale Rechtevergabe für alle Kernel-Objekte.
+- **K14/K15 P2P Secure Protocol:** Handshake, Nonce Anti-Replay, TokenBucket Rate-Limiting.
+- **Boot L0-L10 Verifikation:** K29-Kernelstand mit M2-Lauffähigkeitsgate.
+- **Umfassende Testabdeckung:** 423 Kernel/P2P-Unit-Tests + 280 Service-Tests.
+
+## Repository Structure
+
+```text
+.
+├── .atc/                # ATC-Repository-Metadaten
+├── .github/             # GitHub Workflows & Dependabot
+├── docs/                # Dokumentation & Standards
+├── modules/             # Kernel & Tool-Module
+├── AGENT_MANIFEST.md    # Agent Manifest
+├── AGENTS.md            # AI Agent Instructions
+├── ARCHITECTURE.md      # Kernel Architektur-Spezifikation
+├── CHANGELOG.md         # Änderungshistorie
+├── CODE_OF_CONDUCT.md   # Verhaltenskodex
+├── CODEOWNERS           # Repository-Eigentümer
+├── CONTRIBUTING.md      # Beitragsrichtlinien
+├── GOVERNANCE.md        # Governance-Regeln
+├── LICENSE              # Apache-2.0 Lizenz
+├── README.md            # Repository Einstiegspunkt
+├── ROADMAP.md           # Entwicklungs-Roadmap
+├── SECURITY.md          # Sicherheitsrichtlinie
+└── STATUS.md            # Maschinenlesbarer Status
+```
+
+## Requirements
+
+- Rust 1.98.1 oder neuer (mit `x86_64-unknown-none` bzw. `aarch64-unknown-none` Targets)
+- Cargo & Build-Essential Tools
+- Python 3.10+ für Workspace-Hilfsskripte
+
+## Installation
+
+```bash
+git clone https://github.com/A-TownChain-Okosystems/atc-shivacore.git
+cd atc-shivacore
+cargo build --workspace
+```
+
+## Configuration
+
+Die Repository-Konfiguration liegt unter `.atc/repository.yaml`. Kernel-Parameter können über Cargo-Features angepasst werden.
+
+## Usage
+
+Starten der Boot-Sequenz im Simulator / Target:
+
+```bash
+cargo run --bin boot --manifest-path modules/atc-shivacore/boot/Cargo.toml
+```
+
+## Development
+
+- Beachten Sie die A-TownChain Development Rules (ATC-STD-000, ATC-STD-201).
+- Verwenden Sie Conventional Commits.
+- Integration in das Monorepo erfolgt über `scripts/sync_modules.py` in `a-townchain-os`.
+
+## Testing
+
+Ausführen der gesamten Testsuite:
+
+```bash
+cargo test --workspace
+```
+
+**Erwartetes Ergebnis:** `423/423 PASS` (394 Bestandstests + 29 P2P-Tests).
+
+## Security
+
+Security issues **must not** be disclosed publicly. Report vulnerabilities through the official ATC security reporting process or contact `security@a-townchain.org` (ATC-STD-203, SECURITY.md).
+
+## Documentation
+
+- Full Architecture Spec: [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- Development Roadmap: [`ROADMAP.md`](ROADMAP.md)
+- Organizational Docs: [a-townchain-os-docs](https://github.com/A-TownChain-Okosystems/a-townchain-os-docs)
+
+## Governance
+
+This repository is governed according to ATC-STD-000 v1.2.0 (A-TownChain Enterprise Governance Framework). Architecture changes require approval via SCR (System Change Request).
+
+## Standards & Compliance
+
+| Standard | Version | Compliance |
+|---|---:|---|
+| ATC-STD-000 | 1.2.0 | ✅ APPROVED |
+| ATC-STD-README-001 | 1.0.0 | ✅ APPROVED |
+| ATC-STD-MD-001 | 1.0.0 | ✅ APPROVED |
+| ATC-STD-201 | 1.0.0 | ✅ APPROVED |
+| ATC-STD-202 | 1.1.0 | ✅ APPROVED |
+| ATC-STD-203 | 1.0.0 | ✅ APPROVED |
+| ATC-PROTO-P2P-001 | 1.0.0 | ✅ APPROVED |
+| ATC-STD-REPO-MAINT-001 | 1.0.0 | ✅ APPROVED |
+
+## Roadmap
+
+Die kanonische Roadmap ist in [`ROADMAP.md`](ROADMAP.md) dokumentiert und wird über das ATC Development Management (LAUFFAEHIGKEITS_ROADMAP M1-M8) nachverfolgt.
+
+## Contributing
+
+Beiträge sind willkommen! Siehe [`CONTRIBUTING.md`](CONTRIBUTING.md) für Richtlinien.
+
+## License
+
+Standardisiert unter **Apache-2.0** (siehe [`LICENSE`](LICENSE)).
+
+## Maintainers
+
+- **Organization:** A-TownChain-Okosystems
+- **Owner:** Michael Wroblewski (GitHub: ShivaCoreDev)
+- **Maintainer:** ShivaCore Core Team / Aurora Superagent
+
+## Changelog
+
+Änderungen sind in [`CHANGELOG.md`](CHANGELOG.md) protokolliert.

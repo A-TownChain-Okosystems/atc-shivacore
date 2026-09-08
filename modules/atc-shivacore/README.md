@@ -42,7 +42,7 @@ qemu-system-x86_64 -drive format=raw,file=images/shivacore-bios.img \
 ```
 
 Erwartete Ausgabe:
-```
+```text
 ShivaCore: Kernel-Einstiegspunkt erreicht.
 ShivaCore: Framebuffer-Ausgabe erfolgreich.
 ShivaCore: Boot vollstaendig. Uebergabe an Idle-Loop.
