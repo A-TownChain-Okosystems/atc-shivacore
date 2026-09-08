@@ -1,6 +1,6 @@
 [package]
 name = "shivacore"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "ShivaCore Kernel — implementiert ATS-1000, eigener Kernel ohne Linux-Unterbau"
 

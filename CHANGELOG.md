@@ -1,5 +1,11 @@
 # Changelog — atc-shivacore
 
+## [0.1.0] — 2026-09-08 (Maintenance-Zyklus 1, ATC-STD-REPO-MAINT-001)
+- **Version-Baseline 0.1.0** für kernel/boot/service_space vereinheitlicht (vorher 0.0.1).
+- **Lizenz-Metadatum korrigiert:** `.atc/repository.yaml` license.type proprietary -> Apache-2.0 (SPDX) — Angleichung an LICENSE-Datei (SCR-0036, F-046).
+- **Maintenance-Befunde:** 8 Dependabot-Major-PRs (rand/ed25519-dalek/pc-keyboard/spin/uart_16550) im REVIEW-Pfad; Build/Test-CI fehlt (P1, Owner-Aktion GH013); Tag/Release v0.1.0 HELD bis Build-Gate; 19 TODO/FIXME inventarisiert (Report RUN-001).
+- Report: a-townchain-os-docs/docs/maintenance/2026-09-08_atc-shivacore_MAINT-RUN-001.md
+
 ## [Unreleased] — 2026-09-08
 - **K14-Upgrade: P2P v1.0.0 (ATC-PROTO-P2P-001 implementiert, SCR-0028).**
   NEU kernel/src/p2p_secure.rs (~1250 Zeilen inkl. 29 Unit-Tests):

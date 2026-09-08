@@ -1,6 +1,6 @@
 [package]
 name = "shivacore-service-space"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "ShivaCore Service Space — Blockchain/Consensus/Genesis/Gossip/DID/RemoteCaps/KnowledgeGraph/SecurityAudit (AD-012/AD-028)"
 

@@ -30,3 +30,6 @@ Architekturentscheidungen: zentral im [DECISIONS_REGISTER](https://github.com/A-
 - **Roadmap:** Einordnung in die Lauffaehigkeits-Roadmap M1-M8 (AD-027) und Bauhierarchie L0-L7 (AD-026).
 - **Version:** CHANGELOG.md; SemVer; Releases als ATC-REL-X.Y.Z.
 - **License:** Proprietaer — All Rights Reserved, Michael Wroblewski / ShivaCore / A-TownChain-Okosystems (ATC-LIC/ATS-LIC).
+
+**Maintenance (ATC-STD-REPO-MAINT-001):** Zyklus 1 am 2026-09-08 — Status-Label **MAINTENANCE_REQUIRED**
+(P1 offen: Build/Test-CI, Major-Dependency-REVIEW; P2: Tag/Release HELD). Report: RUN-001 im Docs-Hub.

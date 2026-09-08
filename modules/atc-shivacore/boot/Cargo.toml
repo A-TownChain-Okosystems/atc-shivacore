@@ -1,6 +1,6 @@
 [package]
 name = "boot"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "ShivaCore Boot-Image-Builder — erzeugt BIOS/UEFI Disk-Images aus dem ShivaCore-Kernel-Binary"
 
