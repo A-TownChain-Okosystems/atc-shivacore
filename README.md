@@ -1,5 +1,7 @@
 # ATC ShivaCore
 
+> **ATC COMPLIANCE: R4 · Standard ATC-STD-201 v1.0.0 · GATE: AUDITED (09.09.2026, Score 94/100) · README: ATC-STD-README-001 CONFORM**
+
 > Capability-basierter Rust Microkernel (L1) für Globus OS im A-TownChain-Ökosystem
 
 **Project:** atc-shivacore
