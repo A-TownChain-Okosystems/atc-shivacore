@@ -1017,7 +1017,7 @@ KERNEL_GUARANTEES: alle 4 erfuellt (P2P, Isolation, Audit, Gas)
 **Implementiert:**
 - `ModuleState` — 6 States (Registered→Loading→Active→Unloading→Unloaded/Failed)
 - `ModulePriority` — 7 Priority Levels (Core→Driver→FileSystem→Network→Security→Utility→Custom)
-- `ModuleLicense` — 5 Licenses (GPL/MIT/BSD/Apache/Proprietary) mit Taint-Detection
+- `ModuleLicense` — 5 Licenses (GPL/MIT/BSD/Apache/Licensed under Apache-2.0 (SPDX) — siehe LICENSE
 - `ModuleParam` — Typed Parameters (Bool/Int/Uint/String/List) mit Validation, Read-Only, Reset
 - `ExportedSymbol` — Function/Variable/Constant/Struct/Trait mit Ref-Counting
 - `DependencyGraph` — Topological Sort (Kahn's), Cycle Detection (DFS), Load Order, Diamond Deps
