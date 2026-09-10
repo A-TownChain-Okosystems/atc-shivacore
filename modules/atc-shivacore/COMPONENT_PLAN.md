@@ -93,7 +93,7 @@
 **Datei:** `kernel/src/ai.rs`
 **Zeilen:** 75
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** exp_f64, tanh_f64, sqrt_f64, add, mul, scale, matmul, relu (+12 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -153,7 +153,7 @@
 **Datei:** `kernel/src/block.rs`
 **Zeilen:** 548
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** read_block, write_block, block_count, block_size, capacity, is_read_only, name, struct SimulatedBlockDevice (+37 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -177,7 +177,7 @@
 **Datei:** `kernel/src/consensus.rs`
 **Zeilen:** 961
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct PohEntry, struct PohSequence, new, tick, record, current_hash, tick_count, entries (+79 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -201,7 +201,7 @@
 **Datei:** `kernel/src/container_net.rs`
 **Zeilen:** 632
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** next_veth_id, next_ns_id, next_rule_id, next_portfwd_id, next_dns_id, struct 4]);, new, zero (+151 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -213,7 +213,7 @@
 **Datei:** `kernel/src/contract.rs`
 **Zeilen:** 38
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct ContractExecutor, process_deploy, process_call, process_tx, build_deploy_payload, build_call_payload, hex, setup (+2 weitere)
 
 **Status:** 🔄 STUB
@@ -405,7 +405,7 @@
 **Datei:** `kernel/src/lkm.rs`
 **Zeilen:** 2,998
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** next_module_id, name, is_active, is_loading, is_unloading, is_terminal, fmt, name (+227 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -429,7 +429,7 @@
 **Datei:** `kernel/src/mempool.rs`
 **Zeilen:** 75
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct Transaction, struct MemoryPool, add, validate_tx, get_pending_batch, mark_in_dag, mark_confirmed, cleanup (+8 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -453,7 +453,7 @@
 **Datei:** `kernel/src/net.rs`
 **Zeilen:** 802
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct 6]);, new, broadcast, zero, is_broadcast, is_zero, to_string, struct 4]); (+73 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -465,7 +465,7 @@
 **Datei:** `kernel/src/p2p.rs`
 **Zeilen:** 861
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** from_u8, struct P2pMessage, new, to_bytes, from_bytes, struct Peer, new, struct PeerTable (+69 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -525,7 +525,7 @@
 **Datei:** `kernel/src/security.rs`
 **Zeilen:** 879
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct MultiSigProposal, new, sign, is_ready, remaining_sigs, execute, struct MultiSigManager, new (+87 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -609,7 +609,7 @@
 **Datei:** `kernel/src/tcpip.rs`
 **Zeilen:** 860
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct Ipv4Packet, new, to_bytes, from_bytes, calculate_checksum, with_checksum, struct UdpPacket, new (+73 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -633,7 +633,7 @@
 **Datei:** `kernel/src/timer.rs`
 **Zeilen:** 528
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** now_ns, frequency, resolution_ns, struct SimulatedTimerSource, new, advance, set, now_ns (+46 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -693,7 +693,7 @@
 **Datei:** `kernel/src/vfs.rs`
 **Zeilen:** 1,099
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct FileMetadata, struct Inode, new_file, new_dir, new_symlink, is_dir, is_file, struct FileHandle (+57 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
@@ -705,7 +705,7 @@
 **Datei:** `kernel/src/vm.rs`
 **Zeilen:** 54
 **Typ:** .rs
-**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
+**Beschreibung:** Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
 **Funktionen/Structs:** struct ContractStorage, struct ContractRegistry, struct ShivaVM, push, consume_gas, read_u64, execute, exec_op (+6 weitere)
 
 **Status:** 🟢 IMPLEMENTIERT
