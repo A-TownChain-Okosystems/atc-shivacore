@@ -1,6 +1,6 @@
 # ATC ShivaCore
 
-> **ATC COMPLIANCE: R4 · Standard ATC-STD-201 v1.0.0 · GATE: AUDITED (09.09.2026, Score 94/100) · README: ATC-STD-README-001 CONFORM**
+> **ATC COMPLIANCE: R4 · Standard ATC-STD-201 v1.0.1 · GATE: AUDITED (09.09.2026, Score 94/100) · README: ATC-STD-README-001 CONFORM**
 
 > Capability-basierter Rust Microkernel (L1) für Globus OS im A-TownChain-Ökosystem
 
@@ -164,9 +164,9 @@ This repository is governed according to ATC-STD-000 v1.3.0 (A-TownChain Enterpr
 | ATC-STD-000 | 1.3.0 | ✅ APPROVED |
 | ATC-STD-README-001 | 1.0.0 | ✅ APPROVED |
 | ATC-STD-MD-001 | 1.0.0 | ✅ APPROVED |
-| ATC-STD-201 | 1.0.0 | ✅ APPROVED |
-| ATC-STD-202 | 1.1.0 | ✅ APPROVED |
-| ATC-STD-203 | 1.0.0 | ✅ APPROVED |
+| ATC-STD-201 | 1.0.1 | ✅ APPROVED |
+| ATC-STD-202 | 1.2.0 | ✅ APPROVED |
+| ATC-STD-203 | 1.0.1 | ✅ APPROVED |
 | ATC-PROTO-P2P-001 | 1.0.0 | ✅ APPROVED |
 | ATC-STD-REPO-MAINT-001 | 1.0.0 | ✅ APPROVED |
 
