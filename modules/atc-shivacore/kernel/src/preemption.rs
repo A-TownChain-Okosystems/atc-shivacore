@@ -7,7 +7,7 @@
 
 #![cfg(feature = "x86-boot")]
 
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 /// Architectural state required to resume an interrupted execution context.
 ///
@@ -53,14 +53,20 @@ pub enum PreemptionAction {
     Reschedule,
 }
 
-/// Tracks interrupt nesting and deferred timer preemption.
+/// Tracks interrupt nesting, deferred timer preemption, and the most recent
+/// validated architectural return frame.
 ///
-/// Invariant: a context switch is never requested while the kernel is inside a
-/// critical section. The interrupt path only sets `pending`; the scheduler
-/// consumes it after the outermost critical section has exited.
+/// The frame is stored with a small sequence lock so the IRQ path never takes
+/// a spinlock that could already be held by interrupted kernel code.
 pub struct PreemptionController {
     pending: AtomicBool,
     critical_depth: AtomicUsize,
+    frame_sequence: AtomicUsize,
+    frame_instruction_pointer: AtomicU64,
+    frame_code_segment: AtomicU64,
+    frame_cpu_flags: AtomicU64,
+    frame_stack_pointer: AtomicU64,
+    frame_stack_segment: AtomicU64,
 }
 
 impl PreemptionController {
@@ -68,6 +74,12 @@ impl PreemptionController {
         Self {
             pending: AtomicBool::new(false),
             critical_depth: AtomicUsize::new(0),
+            frame_sequence: AtomicUsize::new(0),
+            frame_instruction_pointer: AtomicU64::new(0),
+            frame_code_segment: AtomicU64::new(0),
+            frame_cpu_flags: AtomicU64::new(0),
+            frame_stack_pointer: AtomicU64::new(0),
+            frame_stack_segment: AtomicU64::new(0),
         }
     }
 
@@ -80,13 +92,51 @@ impl PreemptionController {
         self.pending.load(Ordering::Acquire)
     }
 
+    /// Stores the validated architectural return frame without taking a lock.
+    pub fn record_frame(&self, frame: InterruptFrame) -> Result<(), PreemptionError> {
+        validate_interrupt_frame(&frame)?;
+        self.frame_sequence.fetch_add(1, Ordering::AcqRel); // odd = write in progress
+        self.frame_instruction_pointer
+            .store(frame.instruction_pointer, Ordering::Relaxed);
+        self.frame_code_segment
+            .store(frame.code_segment, Ordering::Relaxed);
+        self.frame_cpu_flags.store(frame.cpu_flags, Ordering::Relaxed);
+        self.frame_stack_pointer
+            .store(frame.stack_pointer, Ordering::Relaxed);
+        self.frame_stack_segment
+            .store(frame.stack_segment, Ordering::Relaxed);
+        self.frame_sequence.fetch_add(1, Ordering::Release); // even = committed
+        Ok(())
+    }
+
+    /// Returns the last complete frame, or None before the first interrupt.
+    pub fn last_frame(&self) -> Option<InterruptFrame> {
+        for _ in 0..4 {
+            let before = self.frame_sequence.load(Ordering::Acquire);
+            if before == 0 || before & 1 != 0 {
+                continue;
+            }
+            let frame = InterruptFrame::new(
+                self.frame_instruction_pointer.load(Ordering::Relaxed),
+                self.frame_code_segment.load(Ordering::Relaxed),
+                self.frame_cpu_flags.load(Ordering::Relaxed),
+                self.frame_stack_pointer.load(Ordering::Relaxed),
+                self.frame_stack_segment.load(Ordering::Relaxed),
+            );
+            let after = self.frame_sequence.load(Ordering::Acquire);
+            if before == after {
+                return Some(frame);
+            }
+        }
+        None
+    }
+
     /// Enters a non-preemptible kernel critical section.
     pub fn enter_critical(&self) {
         self.critical_depth.fetch_add(1, Ordering::AcqRel);
     }
 
-    /// Leaves a critical section. Saturation is avoided so underflow is never
-    /// silently converted into a huge nesting depth.
+    /// Leaves a critical section. Underflow is rejected rather than wrapped.
     pub fn exit_critical(&self) -> Result<(), PreemptionError> {
         let mut current = self.critical_depth.load(Ordering::Acquire);
         loop {
@@ -132,6 +182,11 @@ impl Default for PreemptionController {
         Self::new()
     }
 }
+
+/// Global timer-preemption state shared by the architecture interrupt path and
+/// the scheduler safe-point path. It contains atomics only and is therefore
+/// safe to touch from an interrupt handler without acquiring a kernel lock.
+pub static TIMER_PREEMPTION: PreemptionController = PreemptionController::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreemptionError {
@@ -188,7 +243,8 @@ mod tests {
     }
 
     #[test]
-    fn valid_interrupt_frame_is_accepted() {
+    fn valid_interrupt_frame_is_recorded_without_a_lock() {
+        let controller = PreemptionController::new();
         let frame = InterruptFrame::new(
             0x0000_0000_4000_1000,
             0x8,
@@ -196,15 +252,18 @@ mod tests {
             0x0000_0000_8000_1000,
             0x10,
         );
-        assert_eq!(validate_interrupt_frame(&frame), Ok(()));
+        assert_eq!(controller.record_frame(frame), Ok(()));
+        assert_eq!(controller.last_frame(), Some(frame));
     }
 
     #[test]
     fn zero_return_addresses_fail_closed() {
+        let controller = PreemptionController::new();
         let frame = InterruptFrame::new(0, 0x8, 0x202, 0x8000, 0x10);
         assert_eq!(
-            validate_interrupt_frame(&frame),
+            controller.record_frame(frame),
             Err(PreemptionError::InvalidInterruptFrame)
         );
+        assert_eq!(controller.last_frame(), None);
     }
 }
