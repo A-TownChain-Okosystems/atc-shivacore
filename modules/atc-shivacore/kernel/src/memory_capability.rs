@@ -5,6 +5,7 @@ extern crate alloc;
 
 use crate::ats1000::Pid;
 use crate::capability::{CapId, CapabilityTable, ResourceType, Rights};
+use crate::frame_ownership::{FrameOwnership, FrameOwnershipError};
 use crate::memory_isolation::{IsolationError, Mapping, PageFlags};
 use crate::process_address_space::{AddressSpaceError, ProcessAddressSpaces};
 
@@ -21,6 +22,7 @@ pub enum MemoryCapabilityError {
     InvalidCapability,
     AddressSpace(AddressSpaceError),
     Isolation(IsolationError),
+    FrameOwnership(FrameOwnershipError),
     #[cfg(feature = "x86-boot")]
     PageTable(PageTableError),
 }
@@ -28,11 +30,12 @@ pub enum MemoryCapabilityError {
 impl From<AddressSpaceError> for MemoryCapabilityError {
     fn from(value: AddressSpaceError) -> Self { Self::AddressSpace(value) }
 }
-
 impl From<IsolationError> for MemoryCapabilityError {
     fn from(value: IsolationError) -> Self { Self::Isolation(value) }
 }
-
+impl From<FrameOwnershipError> for MemoryCapabilityError {
+    fn from(value: FrameOwnershipError) -> Self { Self::FrameOwnership(value) }
+}
 #[cfg(feature = "x86-boot")]
 impl From<PageTableError> for MemoryCapabilityError {
     fn from(value: PageTableError) -> Self { Self::PageTable(value) }
@@ -41,6 +44,7 @@ impl From<PageTableError> for MemoryCapabilityError {
 pub struct CapabilityMemory<'a> {
     pub capabilities: &'a CapabilityTable,
     pub spaces: &'a mut ProcessAddressSpaces,
+    pub frames: &'a mut FrameOwnership,
 }
 
 impl<'a> CapabilityMemory<'a> {
@@ -77,18 +81,29 @@ impl<'a> CapabilityMemory<'a> {
 
         let mapping = crate::x86_64_user_mapping::mapping_for_page(page, flags)
             .map_err(crate::x86_64_user_mapping::UserMappingError::into)?;
-        self.spaces.map(pid, mapping)?;
+
+        self.frames.track_allocated(pid, frame)?;
+        if let Err(error) = self.spaces.map(pid, mapping) {
+            let _ = self.frames.release_allocated(pid, frame);
+            return Err(error.into());
+        }
 
         if let Err(error) = page_table.map_user_page(page, frame, flags, frame_allocator) {
             let _ = self.spaces.unmap(pid, mapping.start);
+            let _ = self.frames.release_allocated(pid, frame);
+            return Err(error.into());
+        }
+
+        if let Err(error) = self.frames.mark_mapped(pid, frame, mapping.start) {
+            let _ = page_table.unmap_user_page(page);
+            let _ = self.spaces.unmap(pid, mapping.start);
+            let _ = self.frames.release_allocated(pid, frame);
             return Err(error.into());
         }
         Ok(())
     }
 
     #[cfg(feature = "x86-boot")]
-    /// Unmaps a user page from the process-owned page table and policy registry.
-    /// The physical frame is returned to the caller and is not recycled here.
     pub unsafe fn unmap_user_page(
         &mut self,
         pid: Pid,
@@ -101,15 +116,15 @@ impl<'a> CapabilityMemory<'a> {
             return Err(MemoryCapabilityError::InvalidCapability);
         }
 
-        let mapping = self.spaces.unmap(pid, page.start_address().as_u64())?;
-        let frame = match page_table.unmap_user_page(page) {
-            Ok(frame) => frame,
+        let frame = page_table.unmap_user_page(page)?;
+        let mapping = match self.spaces.unmap(pid, page.start_address().as_u64()) {
+            Ok(mapping) => mapping,
             Err(error) => {
-                // Restore the policy entry if the hardware unmap failed.
-                let _ = self.spaces.map(pid, mapping);
                 return Err(error.into());
             }
         };
+
+        self.frames.release_mapped(pid, frame, mapping.start)?;
         Ok(frame)
     }
 
@@ -133,6 +148,10 @@ mod tests {
         Mapping { start: 0x1_0000_0000, size: 4096, flags: PageFlags::READ.union(PageFlags::USER) }
     }
 
+    fn memory<'a>(caps: &'a CapabilityTable, spaces: &'a mut ProcessAddressSpaces, frames: &'a mut FrameOwnership) -> CapabilityMemory<'a> {
+        CapabilityMemory { capabilities: caps, spaces, frames }
+    }
+
     #[test]
     fn memory_mapping_requires_owned_memory_capability() {
         let pid = Pid(1);
@@ -140,7 +159,8 @@ mod tests {
         let cap = caps.create(pid, ResourceType::Memory, pid.0 as u64, Rights::READ | Rights::WRITE);
         let mut spaces = ProcessAddressSpaces::new();
         spaces.create(pid).unwrap();
-        let mut memory = CapabilityMemory { capabilities: &caps, spaces: &mut spaces };
+        let mut frames = FrameOwnership::new();
+        let mut memory = memory(&caps, &mut spaces, &mut frames);
         memory.map(pid, cap, mapping()).unwrap();
     }
 
@@ -153,7 +173,8 @@ mod tests {
         let mut spaces = ProcessAddressSpaces::new();
         spaces.create(owner).unwrap();
         spaces.create(attacker).unwrap();
-        let mut memory = CapabilityMemory { capabilities: &caps, spaces: &mut spaces };
+        let mut frames = FrameOwnership::new();
+        let mut memory = memory(&caps, &mut spaces, &mut frames);
         assert_eq!(memory.map(attacker, cap, mapping()), Err(MemoryCapabilityError::CapabilityMissing));
     }
 
@@ -164,7 +185,8 @@ mod tests {
         let cap = caps.create(pid, ResourceType::Memory, 99, Rights::READ | Rights::WRITE);
         let mut spaces = ProcessAddressSpaces::new();
         spaces.create(pid).unwrap();
-        let mut memory = CapabilityMemory { capabilities: &caps, spaces: &mut spaces };
+        let mut frames = FrameOwnership::new();
+        let mut memory = memory(&caps, &mut spaces, &mut frames);
         assert_eq!(memory.map(pid, cap, mapping()), Err(MemoryCapabilityError::InvalidCapability));
     }
 
@@ -175,7 +197,8 @@ mod tests {
         let cap = caps.create(pid, ResourceType::Memory, pid.0 as u64, Rights::WRITE);
         let mut spaces = ProcessAddressSpaces::new();
         spaces.create(pid).unwrap();
-        let memory = CapabilityMemory { capabilities: &caps, spaces: &mut spaces };
+        let mut frames = FrameOwnership::new();
+        let memory = memory(&caps, &mut spaces, &mut frames);
         assert_eq!(memory.check_read(pid, cap, 0x1_0000_0000, 1), Err(MemoryCapabilityError::CapabilityMissing));
     }
 }
