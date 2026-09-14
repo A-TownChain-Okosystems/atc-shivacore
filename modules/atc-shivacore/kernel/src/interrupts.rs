@@ -22,14 +22,10 @@ pub static PICS: Mutex<ChainedPics> = Mutex::new(unsafe { ChainedPics::new(PIC_1
 pub enum InterruptIndex { Timer = PIC_1_OFFSET, Keyboard }
 impl InterruptIndex { fn as_u8(self) -> u8 { self as u8 } fn as_usize(self) -> usize { usize::from(self.as_u8()) } }
 
-/// The boot layer owns this bridge for the lifetime of the kernel. Registration
-/// happens once, before the first Ring-3 context is activated.
 static TIMER_BRIDGE: Mutex<Option<&'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>>> = Mutex::new(None);
 static E2E_SWITCH_COUNT: AtomicU8 = AtomicU8::new(0);
 
-pub fn install_timer_scheduler_bridge(bridge: &'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>) {
-    *TIMER_BRIDGE.lock() = Some(bridge);
-}
+pub fn install_timer_scheduler_bridge(bridge: &'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>) { *TIMER_BRIDGE.lock() = Some(bridge); }
 
 pub unsafe fn activate_initial_context(context: &'static shivacore::process_context::ProcessExecutionContext) -> ! {
     let mut guard = TIMER_BRIDGE.lock();
@@ -81,7 +77,7 @@ pub extern "C" fn shivacore_timer_interrupt_dispatch(frame: *mut HardwareContext
                                     match bridge.scheduler().current() {
                                         Some(shivacore::ats1000::Pid(2)) => serial_println!("E2E_PREEMPTION_B"),
                                         Some(shivacore::ats1000::Pid(1)) => {
-                                            if E2E_SWITCH_COUNT.fetch_add(1, Ordering::AcqRel) == 1 {
+                                            if E2E_SWITCH_COUNT.fetch_add(1, Ordering::AcqRel) == 0 {
                                                 serial_println!("E2E_PREEMPTION_A_AGAIN");
                                                 serial_println!("E2E_PREEMPTION_PASS");
                                             }
