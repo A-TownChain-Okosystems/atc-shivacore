@@ -1,15 +1,8 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 //! Kernel-side physical frame ownership ledger.
-//!
-//! The boot allocator knows which frames are physically usable, but it does
-//! not by itself encode ownership. This ledger provides the lifecycle needed
-//! by process address spaces: allocated -> mapped -> released. A frame cannot
-//! be released twice and cannot be mapped by two processes simultaneously.
 
 use alloc::collections::BTreeMap;
-
 use x86_64::{PhysAddr, structures::paging::{PhysFrame, Size4KiB}};
-
 use crate::ats1000::Pid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,14 +22,10 @@ pub enum FrameOwnershipError {
     VirtualAddressMismatch,
 }
 
-pub struct FrameOwnership {
-    frames: BTreeMap<u64, FrameState>,
-}
+pub struct FrameOwnership { frames: BTreeMap<u64, FrameState> }
 
 impl FrameOwnership {
-    pub const fn new() -> Self {
-        Self { frames: BTreeMap::new() }
-    }
+    pub const fn new() -> Self { Self { frames: BTreeMap::new() } }
 
     pub fn track_allocated(&mut self, owner: Pid, frame: PhysFrame) -> Result<(), FrameOwnershipError> {
         if owner.0 == 0 { return Err(FrameOwnershipError::InvalidPid); }
@@ -60,6 +49,17 @@ impl FrameOwnership {
         }
     }
 
+    pub fn validate_mapped(&self, owner: Pid, virtual_address: u64) -> Result<PhysFrame, FrameOwnershipError> {
+        for (address, state) in &self.frames {
+            if let FrameState::Mapped { owner: current, virtual_address: current_va } = *state {
+                if current == owner && current_va == virtual_address {
+                    return Ok(PhysFrame::containing_address(PhysAddr::new(*address)));
+                }
+            }
+        }
+        Err(FrameOwnershipError::NotMapped)
+    }
+
     pub fn release_mapped(&mut self, owner: Pid, frame: PhysFrame, virtual_address: u64) -> Result<(), FrameOwnershipError> {
         let key = frame.start_address().as_u64();
         match self.frames.get(&key).copied() {
@@ -68,9 +68,7 @@ impl FrameOwnership {
                     self.frames.remove(&key);
                     Ok(())
                 }
-            Some(FrameState::Mapped { owner: current, .. }) if current != owner => {
-                Err(FrameOwnershipError::WrongOwner)
-            }
+            Some(FrameState::Mapped { owner: current, .. }) if current != owner => Err(FrameOwnershipError::WrongOwner),
             Some(FrameState::Mapped { .. }) => Err(FrameOwnershipError::VirtualAddressMismatch),
             Some(FrameState::Allocated { .. }) => Err(FrameOwnershipError::NotMapped),
             None => Err(FrameOwnershipError::UnknownFrame),
@@ -90,66 +88,43 @@ impl FrameOwnership {
         }
     }
 
-    pub fn state(&self, frame: PhysFrame) -> Option<FrameState> {
-        self.frames.get(&frame.start_address().as_u64()).copied()
-    }
-
-    pub fn contains(&self, frame: PhysFrame) -> bool {
-        self.frames.contains_key(&frame.start_address().as_u64())
-    }
-
+    pub fn state(&self, frame: PhysFrame) -> Option<FrameState> { self.frames.get(&frame.start_address().as_u64()).copied() }
+    pub fn contains(&self, frame: PhysFrame) -> bool { self.frames.contains_key(&frame.start_address().as_u64()) }
     pub fn len(&self) -> usize { self.frames.len() }
 }
 
-impl Default for FrameOwnership {
-    fn default() -> Self { Self::new() }
-}
+impl Default for FrameOwnership { fn default() -> Self { Self::new() } }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn frame(address: u64) -> PhysFrame {
-        PhysFrame::containing_address(PhysAddr::new(address))
-    }
+    fn frame(address: u64) -> PhysFrame { PhysFrame::containing_address(PhysAddr::new(address)) }
 
     #[test]
     fn lifecycle_is_allocated_mapped_released() {
-        let pid = Pid(1);
-        let f = frame(0x20_0000);
-        let mut ledger = FrameOwnership::new();
-        ledger.track_allocated(pid, f).unwrap();
-        ledger.mark_mapped(pid, f, 0x1_0000_0000).unwrap();
-        assert_eq!(ledger.state(f), Some(FrameState::Mapped { owner: pid, virtual_address: 0x1_0000_0000 }));
-        ledger.release_mapped(pid, f, 0x1_0000_0000).unwrap();
-        assert!(!ledger.contains(f));
+        let pid = Pid(1); let f = frame(0x20_0000); let mut ledger = FrameOwnership::new();
+        ledger.track_allocated(pid, f).unwrap(); ledger.mark_mapped(pid, f, 0x1_0000_0000).unwrap();
+        assert_eq!(ledger.validate_mapped(pid, 0x1_0000_0000), Ok(f));
+        ledger.release_mapped(pid, f, 0x1_0000_0000).unwrap(); assert!(!ledger.contains(f));
     }
 
     #[test]
     fn second_mapping_is_rejected() {
-        let pid = Pid(1);
-        let f = frame(0x21_0000);
-        let mut ledger = FrameOwnership::new();
-        ledger.track_allocated(pid, f).unwrap();
-        ledger.mark_mapped(pid, f, 0x1_0000_0000).unwrap();
+        let pid = Pid(1); let f = frame(0x21_0000); let mut ledger = FrameOwnership::new();
+        ledger.track_allocated(pid, f).unwrap(); ledger.mark_mapped(pid, f, 0x1_0000_0000).unwrap();
         assert_eq!(ledger.mark_mapped(pid, f, 0x1_0000_1000), Err(FrameOwnershipError::AlreadyMapped));
     }
 
     #[test]
     fn wrong_owner_cannot_release() {
-        let f = frame(0x22_0000);
-        let mut ledger = FrameOwnership::new();
-        ledger.track_allocated(Pid(1), f).unwrap();
+        let f = frame(0x22_0000); let mut ledger = FrameOwnership::new(); ledger.track_allocated(Pid(1), f).unwrap();
         assert_eq!(ledger.release_allocated(Pid(2), f), Err(FrameOwnershipError::WrongOwner));
     }
 
     #[test]
     fn mapped_frame_cannot_be_released_as_allocated() {
-        let pid = Pid(1);
-        let f = frame(0x23_0000);
-        let mut ledger = FrameOwnership::new();
-        ledger.track_allocated(pid, f).unwrap();
-        ledger.mark_mapped(pid, f, 0x1_0000_0000).unwrap();
+        let pid = Pid(1); let f = frame(0x23_0000); let mut ledger = FrameOwnership::new();
+        ledger.track_allocated(pid, f).unwrap(); ledger.mark_mapped(pid, f, 0x1_0000_0000).unwrap();
         assert_eq!(ledger.release_allocated(pid, f), Err(FrameOwnershipError::AlreadyMapped));
     }
 }
