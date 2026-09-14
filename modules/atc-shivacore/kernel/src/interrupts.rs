@@ -31,13 +31,10 @@ pub fn install_timer_scheduler_bridge(bridge: &'static mut TimerSchedulerBridge<
     *TIMER_BRIDGE.lock() = Some(bridge);
 }
 
-/// Transfers the boot runtime into the initial Ring-3 process. This is a
-/// one-way operation because the context-switch trampoline terminates the
-/// current Rust control flow with `iretq`.
 pub unsafe fn activate_initial_context(context: &'static shivacore::process_context::ProcessExecutionContext) -> ! {
     let mut guard = TIMER_BRIDGE.lock();
     let bridge = guard.as_deref_mut().expect("E2E: timer scheduler bridge not installed");
-    bridge.scheduler_mut().activate_context(context, bridge.stacks(), bridge.activator()).expect("E2E: initial context activation failed")
+    bridge.activate_initial(context)
 }
 
 lazy_static! {
@@ -82,9 +79,7 @@ pub extern "C" fn shivacore_timer_interrupt_dispatch(frame: *mut HardwareContext
                             match unsafe { bridge.dispatch(context as *mut _ as *mut shivacore::x86_64_context_switch::ContextStack) } {
                                 Ok(target) => {
                                     match bridge.scheduler().current() {
-                                        Some(shivacore::ats1000::Pid(2)) => {
-                                            serial_println!("E2E_PREEMPTION_B");
-                                        }
+                                        Some(shivacore::ats1000::Pid(2)) => serial_println!("E2E_PREEMPTION_B"),
                                         Some(shivacore::ats1000::Pid(1)) => {
                                             if E2E_SWITCH_COUNT.fetch_add(1, Ordering::AcqRel) == 1 {
                                                 serial_println!("E2E_PREEMPTION_A_AGAIN");
