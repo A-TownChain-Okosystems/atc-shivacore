@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 //! Capability-bound memory operations.
 //!
-//! A Memory capability is scoped to one process address space. Mapping and
-//! unmapping require WRITE authority; access checks require READ authority.
-//! Hardware page-table mutation remains outside this policy layer.
+//! The policy layer validates process ownership and capabilities before a
+//! mapping is installed in the process registry. Hardware page-table mutation
+//! is delegated to the x86_64 mapping layer so authorization cannot be
+//! bypassed by the architecture backend.
 
 extern crate alloc;
 
@@ -12,12 +13,21 @@ use crate::capability::{CapId, CapabilityTable, ResourceType, Rights};
 use crate::memory_isolation::{IsolationError, Mapping, PageFlags};
 use crate::process_address_space::{AddressSpaceError, ProcessAddressSpaces};
 
+#[cfg(feature = "x86-boot")]
+use crate::memory::BootInfoFrameAllocator;
+#[cfg(feature = "x86-boot")]
+use crate::x86_64_user_mapping::{map_user_page, validate_user_page, UserMappingError};
+#[cfg(feature = "x86-boot")]
+use x86_64::structures::paging::{Page, PhysFrame, Size4KiB};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryCapabilityError {
     CapabilityMissing,
     InvalidCapability,
     AddressSpace(AddressSpaceError),
     Isolation(IsolationError),
+    #[cfg(feature = "x86-boot")]
+    UserMapping(UserMappingError),
 }
 
 impl From<AddressSpaceError> for MemoryCapabilityError {
@@ -26,6 +36,11 @@ impl From<AddressSpaceError> for MemoryCapabilityError {
 
 impl From<IsolationError> for MemoryCapabilityError {
     fn from(value: IsolationError) -> Self { Self::Isolation(value) }
+}
+
+#[cfg(feature = "x86-boot")]
+impl From<UserMappingError> for MemoryCapabilityError {
+    fn from(value: UserMappingError) -> Self { Self::UserMapping(value) }
 }
 
 /// Coordinates capability authorization with the process-owned mapping policy.
@@ -48,6 +63,42 @@ impl<'a> CapabilityMemory<'a> {
     pub fn check_read(&self, pid: Pid, cap_id: CapId, addr: u64, len: u64) -> Result<(), MemoryCapabilityError> {
         self.require(pid, cap_id, Rights::READ)?;
         self.spaces.check_access(pid, addr, len, PageFlags::READ).map_err(Into::into)
+    }
+
+    #[cfg(feature = "x86-boot")]
+    /// Authorize and install one user-page mapping in the supplied process page table.
+    ///
+    /// The registry is updated only after the hardware mapping succeeds. This
+    /// prevents the policy layer from claiming a mapping which the MMU rejected.
+    pub unsafe fn map_user_page(
+        &mut self,
+        pid: Pid,
+        cap_id: CapId,
+        page: Page<Size4KiB>,
+        frame: PhysFrame,
+        flags: PageFlags,
+        mapper: &mut x86_64::structures::paging::OffsetPageTable<'static>,
+        frame_allocator: &mut BootInfoFrameAllocator,
+    ) -> Result<(), MemoryCapabilityError> {
+        self.require(pid, cap_id, Rights::WRITE)?;
+        let mapping = crate::x86_64_user_mapping::mapping_for_page(page, flags)?;
+
+        // Refuse duplicate/overlapping policy mappings before touching hardware.
+        self.spaces.map(pid, mapping)?;
+
+        if let Err(error) = map_user_page(mapper, page, frame, flags, frame_allocator) {
+            // Roll back the registry if the hardware operation fails.
+            let _ = self.spaces.unmap(pid, mapping.start);
+            return Err(error.into());
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "x86-boot")]
+    pub fn validate_user_mapping(&self, pid: Pid, cap_id: CapId, page: Page<Size4KiB>, flags: PageFlags) -> Result<(), MemoryCapabilityError> {
+        self.require(pid, cap_id, Rights::WRITE)?;
+        validate_user_page(page, flags)?;
+        Ok(())
     }
 
     fn require(&self, pid: Pid, cap_id: CapId, rights: Rights) -> Result<(), MemoryCapabilityError> {
