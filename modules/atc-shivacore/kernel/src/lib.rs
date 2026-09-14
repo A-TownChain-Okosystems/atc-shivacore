@@ -35,6 +35,8 @@ pub mod x86_64_user_mapping;
 #[cfg(feature = "x86-boot")]
 pub mod x86_64_context_switch;
 #[cfg(feature = "x86-boot")]
+pub mod x86_64_timer_entry;
+#[cfg(feature = "x86-boot")]
 pub mod process_context;
 #[cfg(feature = "x86-boot")]
 pub mod kernel_stack;
