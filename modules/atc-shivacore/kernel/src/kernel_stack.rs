@@ -39,6 +39,7 @@ pub struct KernelStackManager { stacks: BTreeMap<Pid, KernelStack> }
 impl KernelStackManager {
     pub const fn new() -> Self { Self { stacks: BTreeMap::new() } }
     pub fn get(&self, pid: Pid) -> Option<&KernelStack> { self.stacks.get(&pid) }
+    pub fn top(&self, pid: Pid) -> Result<u64, KernelStackError> { Ok(self.stacks.get(&pid).ok_or(KernelStackError::Unknown)?.top()) }
     pub fn contains(&self, pid: Pid) -> bool { self.stacks.contains_key(&pid) }
 
     /// Creates a four-page kernel-only stack with one unmapped guard page below it.
