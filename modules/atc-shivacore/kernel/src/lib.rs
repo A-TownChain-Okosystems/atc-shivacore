@@ -30,6 +30,7 @@ pub mod scheduler;
 pub mod ipc;
 pub mod memory_manager;
 pub mod memory_isolation;
+pub mod process_address_space;
 #[cfg(feature = "x86-boot")]
 pub mod x86_64_paging;
 pub mod atcfs;
