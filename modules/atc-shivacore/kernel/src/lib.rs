@@ -40,6 +40,8 @@ pub mod x86_64_timer_entry;
 pub mod process_context;
 #[cfg(feature = "x86-boot")]
 pub mod kernel_stack;
+#[cfg(feature = "x86-boot")]
+pub mod timer_scheduler_bridge;
 pub mod atcfs;
 pub mod vfs;
 pub mod syscall;
