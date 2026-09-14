@@ -1,12 +1,5 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 // ShivaCore — Kernel-Einstiegspunkt.
-// K-Sprint 0: Boot (BIOS+UEFI via `bootloader` 0.11), serielle Debug-Konsole,
-// Framebuffer-Textausgabe.
-// K-Sprint 1: GDT + TSS (Double-Fault-Stack), IDT (Breakpoint/Double-Fault/
-// Page-Fault), PIC-Remapping (0x20-0x2F), Timer+Keyboard-Interrupts aktiv.
-// K-Sprint 2: Paging-Mapper (OffsetPageTable), Frame-Allocator, Heap-
-// Allokator (linked_list_allocator) -- `alloc` (Box/Vec/String) nutzbar.
-// Kein Linux-Unterbau, kein Fremdcode jenseits des minimalen Boot-Protokolls.
 #![no_std]
 #![feature(abi_x86_interrupt)]
 #![feature(alloc_error_handler)]
@@ -16,6 +9,7 @@ extern crate alloc;
 
 mod allocator;
 mod ats1000;
+mod e2e_preemption;
 mod framebuffer;
 mod gdt;
 mod interrupts;
@@ -23,25 +17,18 @@ mod memory;
 mod serial;
 
 use alloc::{boxed::Box, vec::Vec};
-use bootloader_api::{
-    config::{BootloaderConfig, Mapping},
-    entry_point, BootInfo,
-};
+use bootloader_api::{config::{BootloaderConfig, Mapping}, entry_point, BootInfo};
 use core::panic::PanicInfo;
-use shivacore::process_scheduler::KernelStackActivator;
+use shivacore::kernel_stack::KernelStackManager;
+use shivacore::process_scheduler::{KernelStackActivator, ProcessScheduler};
+use shivacore::timer_scheduler_bridge::TimerSchedulerBridge;
+use shivacore::x86_64_page_table::ProcessAddressSpaceManager;
 
-/// x86 boot-layer adapter. The reusable scheduler only knows the
-/// `KernelStackActivator` contract; this binary binds that contract to TSS.RSP0.
 struct TssKernelStackActivator;
-
 impl KernelStackActivator for TssKernelStackActivator {
-    fn activate_kernel_stack(&mut self, stack_top: u64) -> Result<(), ()> {
-        gdt::set_kernel_stack_top(stack_top)
-    }
+    fn activate_kernel_stack(&mut self, stack_top: u64) -> Result<(), ()> { gdt::set_kernel_stack_top(stack_top) }
 }
 
-// Bootloader anweisen, das gesamte physische RAM linear ins virtuelle
-// Adressvolumen zu mappen (Voraussetzung fuer den Paging-Mapper in memory.rs).
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
     config.mappings.physical_memory = Some(Mapping::Dynamic);
@@ -52,6 +39,7 @@ entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     serial_println!("ShivaCore: Kernel-Einstiegspunkt erreicht.");
+    serial_println!("E2E_PREEMPTION_START");
 
     if let Some(fb) = boot_info.framebuffer.as_mut() {
         framebuffer::init(fb);
@@ -65,7 +53,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     interrupts::init_idt();
     x86_64::instructions::interrupts::int3();
     interrupts::init_pics();
-    serial_println!("ShivaCore: GDT/IDT/PIC OK (K-Sprint 1).");
+    // The PIC initialization enables interrupts. Disable them while the
+    // process address spaces and scheduler bridge are being constructed.
+    x86_64::instructions::interrupts::disable();
+    serial_println!("ShivaCore: GDT/IDT/PIC OK.");
 
     let phys_mem_offset = boot_info
         .physical_memory_offset
@@ -75,42 +66,36 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     let mut mapper = unsafe { memory::init(phys_mem_offset) };
     let mut frame_allocator = unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_regions) };
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Heap-Initialisierung fehlgeschlagen");
+    serial_println!("ShivaCore: Paging-Mapper + Heap initialisiert.");
 
-    allocator::init_heap(&mut mapper, &mut frame_allocator)
-        .expect("Heap-Initialisierung fehlgeschlagen");
-    serial_println!("ShivaCore: Paging-Mapper + Heap initialisiert (100 KiB).");
+    let mut scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new());
+    let mut stacks = KernelStackManager::new();
+    let (context_a, _context_b) = unsafe {
+        e2e_preemption::prepare(&mut scheduler, &mut stacks, &mut mapper, &mut frame_allocator, phys_mem_offset)
+    };
 
-    // Keep the concrete adapter in the boot layer. Construction is intentionally
-    // side-effect free until a process context is activated by the scheduler.
-    let _tss_stack_activator = TssKernelStackActivator;
+    serial_println!("E2E_PREEMPTION_A");
 
-    // Heap live testen: Box + Vec muessen funktionieren, ohne zu crashen.
-    let boxed = Box::new(41);
-    serial_println!("ShivaCore: Box-Test -- Wert: {}", *boxed);
+    let scheduler: &'static mut ProcessScheduler = Box::leak(Box::new(scheduler));
+    let stacks: &'static KernelStackManager = Box::leak(Box::new(stacks));
+    let activator: &'static mut TssKernelStackActivator = Box::leak(Box::new(TssKernelStackActivator));
+    let bridge: &'static mut TimerSchedulerBridge<'static, TssKernelStackActivator> =
+        Box::leak(Box::new(TimerSchedulerBridge::new(scheduler, stacks, activator)));
+    let context_a: &'static shivacore::process_context::ProcessExecutionContext = Box::leak(context_a);
 
-    let mut vec = Vec::new();
-    for i in 0..10 {
-        vec.push(i);
-    }
-    serial_println!("ShivaCore: Vec-Test -- Summe 0..10: {}", vec.iter().sum::<i32>());
+    interrupts::install_timer_scheduler_bridge(bridge);
+    serial_println!("ShivaCore: Timer scheduler bridge installiert.");
+    x86_64::instructions::interrupts::enable();
 
-    println!("K-Sprint 2: Paging/Heap OK (Box+Vec getestet)");
-    serial_println!("ShivaCore: K-Sprint 2 abgeschlossen. Uebergabe an Idle-Loop.");
-
-    loop {
-        x86_64::instructions::hlt();
-    }
+    unsafe { interrupts::activate_initial_context(context_a) }
 }
 
 #[alloc_error_handler]
-fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
-    panic!("Allokation fehlgeschlagen: {:?}", layout)
-}
+fn alloc_error_handler(layout: core::alloc::Layout) -> ! { panic!("Allokation fehlgeschlagen: {:?}", layout) }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     serial_println!("ShivaCore: KERNEL PANIC -- {}", info);
-    loop {
-        x86_64::instructions::hlt();
-    }
+    loop { x86_64::instructions::hlt(); }
 }
