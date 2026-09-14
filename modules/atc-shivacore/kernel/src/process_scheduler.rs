@@ -5,14 +5,23 @@ extern crate alloc;
 use alloc::collections::{BTreeMap, VecDeque};
 use x86_64::{structures::paging::PageTable, VirtAddr};
 use crate::ats1000::Pid;
+use crate::kernel_stack::KernelStackManager;
 use crate::memory::BootInfoFrameAllocator;
 use crate::preemption::{PreemptionAction, TIMER_PREEMPTION};
 use crate::process_context::ProcessExecutionContext;
 use crate::x86_64_context_switch::switch_to_context;
 use crate::x86_64_page_table::{PageTableError, ProcessAddressSpaceManager};
 
+/// Architecture boundary for the CPU-specific active kernel stack (TSS.RSP0).
+/// The scheduler knows only the contract; the x86 boot binary supplies the
+/// concrete implementation. This prevents the reusable kernel library from
+/// depending on the boot-only GDT/TSS module.
+pub trait KernelStackActivator {
+    fn activate_kernel_stack(&mut self, stack_top: u64) -> Result<(), ()>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ContextSwitchError { ProcessMissing, InvalidState, AddressSpace(PageTableError), ContextRootMismatch }
+pub enum ContextSwitchError { ProcessMissing, InvalidState, AddressSpace(PageTableError), ContextRootMismatch, KernelStackMissing, KernelStackActivation }
 impl From<PageTableError> for ContextSwitchError { fn from(value: PageTableError) -> Self { Self::AddressSpace(value) } }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunState { Ready, Running }
@@ -43,9 +52,19 @@ impl ProcessScheduler {
         if !TIMER_PREEMPTION.take_if_safe() { return Ok(None); }
         self.schedule_next()
     }
+
+    /// Binds the target process's owned kernel stack to the architecture layer.
+    /// This occurs before CR3 activation so a subsequent CPL3 -> CPL0 entry
+    /// can use the target's TSS.RSP0. No scheduler state is changed on failure.
+    pub unsafe fn bind_kernel_stack<A: KernelStackActivator>(&self, pid: Pid, stacks: &KernelStackManager, activator: &mut A) -> Result<(), ContextSwitchError> {
+        if !self.address_spaces.contains(pid) { return Err(ContextSwitchError::ProcessMissing); }
+        let top = stacks.top(pid).map_err(|_| ContextSwitchError::KernelStackMissing)?;
+        activator.activate_kernel_stack(top).map_err(|_| ContextSwitchError::KernelStackActivation)
+    }
+
     /// Commits CR3 and scheduler state, then enters the validated user-mode
     /// interrupt-return trampoline. This function never returns on success.
-    pub unsafe fn activate_context(&mut self, context: &ProcessExecutionContext) -> Result<!, ContextSwitchError> {
+    pub unsafe fn activate_context<A: KernelStackActivator>(&mut self, context: &ProcessExecutionContext, stacks: &KernelStackManager, activator: &mut A) -> Result<!, ContextSwitchError> {
         let pid = context.pid();
         if !self.address_spaces.contains(pid) { return Err(ContextSwitchError::ProcessMissing); }
         if self.current == Some(pid) || self.states.get(&pid).copied() != Some(RunState::Ready) { return Err(ContextSwitchError::InvalidState); }
@@ -56,6 +75,7 @@ impl ProcessScheduler {
         context.validate_user_return().map_err(|_| ContextSwitchError::InvalidState)?;
         if !self.ready.iter().any(|queued| *queued == pid) { return Err(ContextSwitchError::InvalidState); }
 
+        self.bind_kernel_stack(pid, stacks, activator)?;
         self.address_spaces.switch_to(pid)?;
         self.ready.retain(|queued| *queued != pid);
         if let Some(old) = self.current { self.states.insert(old, RunState::Ready); self.ready.push_back(old); }
@@ -63,6 +83,7 @@ impl ProcessScheduler {
         self.current = Some(pid);
         switch_to_context(context.context_stack())
     }
+
     pub unsafe fn switch_to(&mut self, next: Pid) -> Result<(), ContextSwitchError> {
         if !self.address_spaces.contains(next) { return Err(ContextSwitchError::ProcessMissing); }
         if self.current == Some(next) { return Ok(()); }
