@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
-// ShivaCore — Interrupt Descriptor Table + PIC-Remapping.
+// ShivaCore — Global Descriptor Table + Task State Segment.
 
 use crate::gdt;
 use crate::serial_println;
@@ -11,6 +11,7 @@ use shivacore::timer_scheduler_bridge::TimerSchedulerBridge;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 use x86_64::VirtAddr;
+use core::sync::atomic::{AtomicU8, Ordering};
 
 pub const PIC_1_OFFSET: u8 = 0x20;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
@@ -22,12 +23,21 @@ pub enum InterruptIndex { Timer = PIC_1_OFFSET, Keyboard }
 impl InterruptIndex { fn as_u8(self) -> u8 { self as u8 } fn as_usize(self) -> usize { usize::from(self.as_u8()) } }
 
 /// The boot layer owns this bridge for the lifetime of the kernel. Registration
-/// happens once, before interrupts are enabled. A null pointer keeps the timer
-/// IRQ on the safe no-switch path until a scheduler is explicitly installed.
+/// happens once, before the first Ring-3 context is activated.
 static TIMER_BRIDGE: Mutex<Option<&'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>>> = Mutex::new(None);
+static E2E_SWITCH_COUNT: AtomicU8 = AtomicU8::new(0);
 
 pub fn install_timer_scheduler_bridge(bridge: &'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>) {
     *TIMER_BRIDGE.lock() = Some(bridge);
+}
+
+/// Transfers the boot runtime into the initial Ring-3 process. This is a
+/// one-way operation because the context-switch trampoline terminates the
+/// current Rust control flow with `iretq`.
+pub unsafe fn activate_initial_context(context: &'static shivacore::process_context::ProcessExecutionContext) -> ! {
+    let mut guard = TIMER_BRIDGE.lock();
+    let bridge = guard.as_deref_mut().expect("E2E: timer scheduler bridge not installed");
+    bridge.scheduler_mut().activate_context(context, bridge.stacks(), bridge.activator()).expect("E2E: initial context activation failed")
 }
 
 lazy_static! {
@@ -60,10 +70,6 @@ extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, e
 #[no_mangle]
 pub extern "C" fn shivacore_timer_interrupt_dispatch(frame: *mut HardwareContextFrame) -> *const shivacore::x86_64_context_switch::ContextStack {
     let result = if let Some(context) = current_context(frame) {
-        // Hardware pushes RSP/SS only when the interrupt crosses privilege
-        // levels. This context-switch path is explicitly ring-3 -> ring-0.
-        // Kernel-mode timer interrupts must not reinterpret unrelated stack
-        // words as an iret RSP/SS pair.
         if context.iret.cs & 0x3 != 0x3 {
             no_switch()
         } else {
@@ -74,7 +80,21 @@ pub extern "C" fn shivacore_timer_interrupt_dispatch(frame: *mut HardwareContext
                     if TIMER_PREEMPTION.preemption_point() == shivacore::preemption::PreemptionAction::Reschedule {
                         if let Some(bridge) = TIMER_BRIDGE.lock().as_deref_mut() {
                             match unsafe { bridge.dispatch(context as *mut _ as *mut shivacore::x86_64_context_switch::ContextStack) } {
-                                Ok(target) => target,
+                                Ok(target) => {
+                                    match bridge.scheduler().current() {
+                                        Some(shivacore::ats1000::Pid(2)) => {
+                                            serial_println!("E2E_PREEMPTION_B");
+                                        }
+                                        Some(shivacore::ats1000::Pid(1)) => {
+                                            if E2E_SWITCH_COUNT.fetch_add(1, Ordering::AcqRel) == 1 {
+                                                serial_println!("E2E_PREEMPTION_A_AGAIN");
+                                                serial_println!("E2E_PREEMPTION_PASS");
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                    target
+                                }
                                 Err(_) => no_switch(),
                             }
                         } else { no_switch() }
