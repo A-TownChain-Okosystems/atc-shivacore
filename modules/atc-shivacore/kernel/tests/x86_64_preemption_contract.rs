@@ -1,11 +1,9 @@
+#![cfg(feature = "x86-boot")]
+
 //! Architecture-level contract tests for the x86_64 timer preemption path.
-//!
-//! These tests intentionally validate the pieces that can be checked without
-//! starting QEMU. The real A -> B -> A transition remains a boot-time test.
 
 #[test]
 fn preemption_contract_requires_ring3_context() {
-    // x86_64 RPL3 selector contract used by ProcessExecutionContext.
     assert_eq!(0x1b_u64 & 0x3, 0x3);
     assert_eq!(0x08_u64 & 0x3, 0x0);
 }
@@ -20,7 +18,5 @@ fn context_restore_contract_is_15_registers_plus_iret_frame() {
 
 #[test]
 fn timer_entry_symbol_contract_is_exposed() {
-    // The actual address is architecture/runtime-specific; this test only
-    // guarantees the symbol-facing API remains available to the boot layer.
     let _ = shivacore::x86_64_timer_entry::entry_address;
 }
