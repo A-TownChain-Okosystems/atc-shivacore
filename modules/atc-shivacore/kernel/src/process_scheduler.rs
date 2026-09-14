@@ -6,6 +6,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use x86_64::{structures::paging::PageTable, VirtAddr};
 use crate::ats1000::Pid;
 use crate::memory::BootInfoFrameAllocator;
+use crate::preemption::{PreemptionAction, TIMER_PREEMPTION};
 use crate::x86_64_page_table::{PageTableError, ProcessAddressSpaceManager};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +35,19 @@ impl ProcessScheduler {
         let next = match self.ready.pop_front() { Some(pid) => pid, None => return Ok(None) };
         if let Err(e) = self.switch_to(next) { self.ready.push_front(next); return Err(e); }
         Ok(Some(next))
+    }
+    /// Consumes a timer request only at a scheduler-defined safe point.
+    ///
+    /// The timer IRQ itself never calls this method and never changes CR3.
+    /// If the kernel is in a critical section the request remains pending.
+    pub unsafe fn preemption_point(&mut self) -> Result<Option<Pid>, ContextSwitchError> {
+        if TIMER_PREEMPTION.preemption_point() != PreemptionAction::Reschedule {
+            return Ok(None);
+        }
+        if !TIMER_PREEMPTION.take_if_safe() {
+            return Ok(None);
+        }
+        self.schedule_next()
     }
     /// Architecture switch is the commit boundary: scheduler state is not
     /// changed until the address-space switch succeeds.
