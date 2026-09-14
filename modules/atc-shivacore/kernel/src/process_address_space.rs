@@ -17,13 +17,13 @@ pub enum AddressSpaceError {
     ProcessMissing,
     MappingOwnerMismatch,
     AlreadyMapped,
+    MappingMissing,
 }
 
 impl From<IsolationError> for AddressSpaceError {
     fn from(value: IsolationError) -> Self { Self::Isolation(value) }
 }
 
-/// Kernel-owned registry of process address spaces.
 pub struct ProcessAddressSpaces {
     spaces: BTreeMap<Pid, AddressSpace>,
 }
@@ -53,6 +53,14 @@ impl ProcessAddressSpaces {
 
     pub fn unmap(&mut self, pid: Pid, start: u64) -> Result<Mapping, AddressSpaceError> {
         self.spaces.get_mut(&pid).ok_or(AddressSpaceError::ProcessMissing)?.unmap(start).map_err(Into::into)
+    }
+
+    pub fn mapping_at(&self, pid: Pid, start: u64) -> Result<Mapping, AddressSpaceError> {
+        let space = self.spaces.get(&pid).ok_or(AddressSpaceError::ProcessMissing)?;
+        space.mappings()
+            .find(|mapping| mapping.start == start)
+            .copied()
+            .ok_or(AddressSpaceError::MappingMissing)
     }
 
     pub fn check_access(&self, pid: Pid, addr: u64, len: u64, required: PageFlags) -> Result<(), AddressSpaceError> {
@@ -94,6 +102,16 @@ mod tests {
         spaces.map(a, mapping(0x1_0000_0000, 4096)).unwrap();
         assert!(spaces.unmap(b, 0x1_0000_0000).is_err());
         assert!(spaces.unmap(a, 0x1_0000_0000).is_ok());
+    }
+
+    #[test]
+    fn mapping_lookup_is_exact() {
+        let mut spaces = ProcessAddressSpaces::new();
+        let pid = Pid(7);
+        spaces.create(pid).unwrap();
+        spaces.map(pid, mapping(0x1_0000_0000, 4096)).unwrap();
+        assert_eq!(spaces.mapping_at(pid, 0x1_0000_0000).unwrap().size, 4096);
+        assert_eq!(spaces.mapping_at(pid, 0x1_0000_1000), Err(AddressSpaceError::MappingMissing));
     }
 
     #[test]
