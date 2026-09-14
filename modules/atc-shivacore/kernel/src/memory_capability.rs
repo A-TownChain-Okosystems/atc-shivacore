@@ -1,10 +1,9 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 //! Capability-bound memory operations.
 //!
-//! This layer prevents a process from turning an address-space mapping into
-//! ambient authority. Mapping and unmapping require an owned Memory capability
-//! with the corresponding rights. Hardware page-table mutation remains outside
-//! this policy layer.
+//! A Memory capability is scoped to one process address space. Mapping and
+//! unmapping require WRITE authority; access checks require READ authority.
+//! Hardware page-table mutation remains outside this policy layer.
 
 extern crate alloc;
 
@@ -36,33 +35,17 @@ pub struct CapabilityMemory<'a> {
 }
 
 impl<'a> CapabilityMemory<'a> {
-    pub fn map(
-        &mut self,
-        pid: Pid,
-        cap_id: CapId,
-        mapping: Mapping,
-    ) -> Result<(), MemoryCapabilityError> {
+    pub fn map(&mut self, pid: Pid, cap_id: CapId, mapping: Mapping) -> Result<(), MemoryCapabilityError> {
         self.require(pid, cap_id, Rights::WRITE)?;
         self.spaces.map(pid, mapping).map_err(Into::into)
     }
 
-    pub fn unmap(
-        &mut self,
-        pid: Pid,
-        cap_id: CapId,
-        start: u64,
-    ) -> Result<Mapping, MemoryCapabilityError> {
+    pub fn unmap(&mut self, pid: Pid, cap_id: CapId, start: u64) -> Result<Mapping, MemoryCapabilityError> {
         self.require(pid, cap_id, Rights::WRITE)?;
         self.spaces.unmap(pid, start).map_err(Into::into)
     }
 
-    pub fn check_read(
-        &self,
-        pid: Pid,
-        cap_id: CapId,
-        addr: u64,
-        len: u64,
-    ) -> Result<(), MemoryCapabilityError> {
+    pub fn check_read(&self, pid: Pid, cap_id: CapId, addr: u64, len: u64) -> Result<(), MemoryCapabilityError> {
         self.require(pid, cap_id, Rights::READ)?;
         self.spaces.check_access(pid, addr, len, PageFlags::READ).map_err(Into::into)
     }
@@ -72,7 +55,7 @@ impl<'a> CapabilityMemory<'a> {
             return Err(MemoryCapabilityError::CapabilityMissing);
         }
         let cap = self.capabilities.get(cap_id).ok_or(MemoryCapabilityError::InvalidCapability)?;
-        if cap.resource_type != ResourceType::Memory {
+        if cap.resource_type != ResourceType::Memory || cap.resource_id != pid.0 as u64 {
             return Err(MemoryCapabilityError::InvalidCapability);
         }
         Ok(())
@@ -82,7 +65,6 @@ impl<'a> CapabilityMemory<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory_isolation::Mapping;
 
     fn mapping() -> Mapping {
         Mapping { start: 0x1_0000_0000, size: 4096, flags: PageFlags::READ.union(PageFlags::USER) }
@@ -92,7 +74,7 @@ mod tests {
     fn memory_mapping_requires_owned_memory_capability() {
         let pid = Pid(1);
         let mut caps = CapabilityTable::new();
-        let cap = caps.create(pid, ResourceType::Memory, 1, Rights::READ | Rights::WRITE);
+        let cap = caps.create(pid, ResourceType::Memory, pid.0 as u64, Rights::READ | Rights::WRITE);
         let mut spaces = ProcessAddressSpaces::new();
         spaces.create(pid).unwrap();
         let mut memory = CapabilityMemory { capabilities: &caps, spaces: &mut spaces };
@@ -104,7 +86,7 @@ mod tests {
         let owner = Pid(1);
         let attacker = Pid(2);
         let mut caps = CapabilityTable::new();
-        let cap = caps.create(owner, ResourceType::Memory, 1, Rights::READ | Rights::WRITE);
+        let cap = caps.create(owner, ResourceType::Memory, owner.0 as u64, Rights::READ | Rights::WRITE);
         let mut spaces = ProcessAddressSpaces::new();
         spaces.create(owner).unwrap();
         spaces.create(attacker).unwrap();
@@ -113,13 +95,24 @@ mod tests {
     }
 
     #[test]
-    fn read_requires_read_right() {
+    fn mismatched_memory_scope_is_rejected() {
         let pid = Pid(3);
         let mut caps = CapabilityTable::new();
-        let cap = caps.create(pid, ResourceType::Memory, 1, Rights::WRITE);
+        let cap = caps.create(pid, ResourceType::Memory, 99, Rights::READ | Rights::WRITE);
         let mut spaces = ProcessAddressSpaces::new();
         spaces.create(pid).unwrap();
         let mut memory = CapabilityMemory { capabilities: &caps, spaces: &mut spaces };
+        assert_eq!(memory.map(pid, cap, mapping()), Err(MemoryCapabilityError::InvalidCapability));
+    }
+
+    #[test]
+    fn read_requires_read_right() {
+        let pid = Pid(3);
+        let mut caps = CapabilityTable::new();
+        let cap = caps.create(pid, ResourceType::Memory, pid.0 as u64, Rights::WRITE);
+        let mut spaces = ProcessAddressSpaces::new();
+        spaces.create(pid).unwrap();
+        let memory = CapabilityMemory { capabilities: &caps, spaces: &mut spaces };
         assert_eq!(memory.check_read(pid, cap, 0x1_0000_0000, 1), Err(MemoryCapabilityError::CapabilityMissing));
     }
 }
