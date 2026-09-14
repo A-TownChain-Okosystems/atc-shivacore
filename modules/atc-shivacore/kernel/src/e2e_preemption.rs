@@ -4,6 +4,7 @@
 
 use alloc::boxed::Box;
 use core::mem::size_of;
+use crate::gdt;
 use shivacore::ats1000::Pid;
 use shivacore::kernel_stack::{KernelStack, KernelStackManager, DEFAULT_STACK_PAGES, PAGE_SIZE};
 use shivacore::memory::BootInfoFrameAllocator;
@@ -20,8 +21,6 @@ pub const USER_CODE_B: u64 = 0x0000_0001_4020_0000;
 pub const USER_STACK_A: u64 = 0x0000_0001_8000_0000;
 pub const USER_STACK_B: u64 = 0x0000_0001_8020_0000;
 
-/// Builds the smallest real Ring-3 A/B setup. Context validation is performed
-/// only while the corresponding process CR3 is active.
 pub unsafe fn prepare(
     scheduler: &mut ProcessScheduler,
     stacks: &mut KernelStackManager,
@@ -39,8 +38,8 @@ pub unsafe fn prepare(
     map_user_image(scheduler, PROCESS_A, USER_CODE_A, USER_STACK_A, frame_allocator, physical_memory_offset);
     map_user_image(scheduler, PROCESS_B, USER_CODE_B, USER_STACK_B, frame_allocator, physical_memory_offset);
 
-    let context_ptr_a = initialize_context(stack_a, USER_CODE_A, USER_STACK_A, physical_memory_offset, 0x1b, 0x23);
-    let context_ptr_b = initialize_context(stack_b, USER_CODE_B, USER_STACK_B, physical_memory_offset, 0x1b, 0x23);
+    let context_ptr_a = initialize_context(stack_a, USER_CODE_A, USER_STACK_A, physical_memory_offset);
+    let context_ptr_b = initialize_context(stack_b, USER_CODE_B, USER_STACK_B, physical_memory_offset);
 
     scheduler.address_spaces_mut().switch_to(PROCESS_B).expect("E2E: activate B for validation failed");
     let root_b = scheduler.address_spaces().root(PROCESS_B).expect("E2E: root B missing");
@@ -92,8 +91,6 @@ unsafe fn initialize_context(
     user_rip: u64,
     user_stack: u64,
     physical_memory_offset: VirtAddr,
-    cs: u16,
-    ss: u16,
 ) -> *const ContextStack {
     let context_address = stack.top() - size_of::<ContextStack>() as u64;
     assert_eq!(context_address & 0xF, 0, "E2E: context stack must be 16-byte aligned");
@@ -107,10 +104,10 @@ unsafe fn initialize_context(
         registers: SavedRegisters { r15:0, r14:0, r13:0, r12:0, r11:0, r10:0, r9:0, r8:0, rsi:0, rdi:0, rbp:0, rdx:0, rcx:0, rbx:0, rax:0 },
         iret: IretFrame {
             rip: user_rip,
-            cs: cs as u64,
+            cs: gdt::user_code_selector() as u64,
             rflags: 0x202,
             rsp: user_stack + PAGE_SIZE - 16,
-            ss: ss as u64,
+            ss: gdt::user_data_selector() as u64,
         },
     });
     context_ptr
