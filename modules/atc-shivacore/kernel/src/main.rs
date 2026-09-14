@@ -28,6 +28,17 @@ use bootloader_api::{
     entry_point, BootInfo,
 };
 use core::panic::PanicInfo;
+use shivacore::process_scheduler::KernelStackActivator;
+
+/// x86 boot-layer adapter. The reusable scheduler only knows the
+/// `KernelStackActivator` contract; this binary binds that contract to TSS.RSP0.
+struct TssKernelStackActivator;
+
+impl KernelStackActivator for TssKernelStackActivator {
+    fn activate_kernel_stack(&mut self, stack_top: u64) -> Result<(), ()> {
+        gdt::set_kernel_stack_top(stack_top)
+    }
+}
 
 // Bootloader anweisen, das gesamte physische RAM linear ins virtuelle
 // Adressvolumen zu mappen (Voraussetzung fuer den Paging-Mapper in memory.rs).
@@ -68,6 +79,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     allocator::init_heap(&mut mapper, &mut frame_allocator)
         .expect("Heap-Initialisierung fehlgeschlagen");
     serial_println!("ShivaCore: Paging-Mapper + Heap initialisiert (100 KiB).");
+
+    // Keep the concrete adapter in the boot layer. Construction is intentionally
+    // side-effect free until a process context is activated by the scheduler.
+    let _tss_stack_activator = TssKernelStackActivator;
 
     // Heap live testen: Box + Vec muessen funktionieren, ohne zu crashen.
     let boxed = Box::new(41);
