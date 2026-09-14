@@ -3,7 +3,7 @@
 #![cfg(feature = "x86-boot")]
 extern crate alloc;
 use alloc::collections::{BTreeMap, BTreeSet};
-use x86_64::{structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, Size4KiB}, PhysAddr, VirtAddr};
+use x86_64::{structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB}, PhysAddr, VirtAddr};
 use crate::ats1000::Pid;
 use crate::memory::BootInfoFrameAllocator;
 use crate::memory_isolation::PageFlags;
@@ -11,7 +11,7 @@ use crate::x86_64_address_space::{self, AddressSpaceSwitchError, PageTableRoot};
 use crate::x86_64_user_mapping::{map_user_page, validate_user_page, UserMappingError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PageTableError { InvalidPid, OutOfFrames, InvalidRoot, Mapping(UserMappingError), NotMapped, AlreadyMapped, ProcessExists, ProcessMissing, RootOwnershipConflict, OutstandingMappings, ReclaimConflict }
+pub enum PageTableError { InvalidPid, OutOfFrames, InvalidRoot, Mapping(UserMappingError), NotMapped, AlreadyMapped, ProcessExists, ProcessMissing, RootOwnershipConflict, OutstandingMappings, ReclaimConflict, KernelMappingConflict }
 impl From<UserMappingError> for PageTableError { fn from(value: UserMappingError) -> Self { Self::Mapping(value) } }
 
 struct HierarchyFrameAllocator<'a> { allocator: &'a mut BootInfoFrameAllocator, owned: &'a mut BTreeSet<u64> }
@@ -29,6 +29,7 @@ pub struct ProcessPageTable {
     root_frame: PhysFrame,
     physical_memory_offset: VirtAddr,
     user_mappings: BTreeSet<u64>,
+    kernel_mappings: BTreeSet<u64>,
     hierarchy_frames: BTreeSet<u64>,
 }
 impl ProcessPageTable {
@@ -38,20 +39,21 @@ impl ProcessPageTable {
         let root_virt = physical_memory_offset + root_frame.start_address().as_u64();
         let root_ptr = root_virt.as_mut_ptr::<PageTable>(); root_ptr.write(PageTable::new());
         let root = &mut *root_ptr; for index in 256..512 { root[index] = active_root[index].clone(); }
-        Ok(Self { pid, root_frame, physical_memory_offset, user_mappings: BTreeSet::new(), hierarchy_frames: BTreeSet::new() })
+        Ok(Self { pid, root_frame, physical_memory_offset, user_mappings: BTreeSet::new(), kernel_mappings: BTreeSet::new(), hierarchy_frames: BTreeSet::new() })
     }
     pub const fn pid(&self) -> Pid { self.pid }
     pub fn root_frame(&self) -> PhysFrame { self.root_frame }
     pub fn root_context(&self) -> Result<PageTableRoot, AddressSpaceSwitchError> { PageTableRoot::new(self.pid, self.root_frame.start_address().as_u64()) }
     pub fn root_physical_address(&self) -> PhysAddr { self.root_frame.start_address() }
     pub fn user_mapping_count(&self) -> usize { self.user_mappings.len() }
+    pub fn kernel_mapping_count(&self) -> usize { self.kernel_mappings.len() }
     pub fn has_user_mapping(&self, virtual_address: u64) -> bool { self.user_mappings.contains(&virtual_address) }
     pub fn hierarchy_frame_count(&self) -> usize { self.hierarchy_frames.len() }
     pub unsafe fn mapper(&mut self) -> OffsetPageTable<'static> { let root_virt = self.physical_memory_offset + self.root_frame.start_address().as_u64(); let root = &mut *root_virt.as_mut_ptr::<PageTable>(); OffsetPageTable::new(root, self.physical_memory_offset) }
     pub unsafe fn map_user_page(&mut self, page: Page<Size4KiB>, frame: PhysFrame, flags: PageFlags, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
         validate_user_page(page, flags)?;
         let virtual_address = page.start_address().as_u64();
-        if self.user_mappings.contains(&virtual_address) { return Err(PageTableError::AlreadyMapped); }
+        if self.user_mappings.contains(&virtual_address) || self.kernel_mappings.contains(&virtual_address) { return Err(PageTableError::AlreadyMapped); }
         let before = self.hierarchy_frames.clone();
         let mut tracked_allocator = HierarchyFrameAllocator::new(frame_allocator, &mut self.hierarchy_frames);
         let mut mapper = self.mapper();
@@ -62,12 +64,35 @@ impl ProcessPageTable {
         }
         self.user_mappings.insert(virtual_address); Ok(())
     }
+    /// Maps a kernel-only page into this process address space. The USER bit is never set.
+    pub unsafe fn map_kernel_page(&mut self, page: Page<Size4KiB>, frame: PhysFrame, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
+        let virtual_address = page.start_address().as_u64();
+        if virtual_address < 0xffff_8000_0000_0000 || self.user_mappings.contains(&virtual_address) || self.kernel_mappings.contains(&virtual_address) { return Err(PageTableError::KernelMappingConflict); }
+        let before = self.hierarchy_frames.clone();
+        let mut tracked_allocator = HierarchyFrameAllocator::new(frame_allocator, &mut self.hierarchy_frames);
+        let mut mapper = self.mapper();
+        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_EXECUTE;
+        if let Err(error) = mapper.map_to(page, frame, flags, &mut tracked_allocator).map(|flush| flush.flush()) {
+            let newly_allocated: BTreeSet<u64> = self.hierarchy_frames.difference(&before).copied().collect();
+            for address in newly_allocated { self.hierarchy_frames.remove(&address); let _ = frame_allocator.reclaim_frame(PhysFrame::containing_address(PhysAddr::new(address))); }
+            let _ = error;
+            return Err(PageTableError::KernelMappingConflict);
+        }
+        self.kernel_mappings.insert(virtual_address); Ok(())
+    }
     pub unsafe fn unmap_user_page(&mut self, page: Page<Size4KiB>) -> Result<PhysFrame, PageTableError> {
         let virtual_address = page.start_address().as_u64();
         if !self.user_mappings.contains(&virtual_address) { return Err(PageTableError::NotMapped); }
         let mut mapper = self.mapper();
         let (frame, flush) = mapper.unmap(page).map_err(|_| PageTableError::NotMapped)?;
         flush.flush(); self.user_mappings.remove(&virtual_address); Ok(frame)
+    }
+    pub unsafe fn unmap_kernel_page(&mut self, page: Page<Size4KiB>) -> Result<PhysFrame, PageTableError> {
+        let virtual_address = page.start_address().as_u64();
+        if !self.kernel_mappings.contains(&virtual_address) { return Err(PageTableError::NotMapped); }
+        let mut mapper = self.mapper();
+        let (frame, flush) = mapper.unmap(page).map_err(|_| PageTableError::NotMapped)?;
+        flush.flush(); self.kernel_mappings.remove(&virtual_address); Ok(frame)
     }
     pub fn validate_user_page(&self, page: Page<Size4KiB>, flags: PageFlags) -> Result<(), PageTableError> { validate_user_page(page, flags)?; Ok(()) }
     fn private_frames(&self) -> impl Iterator<Item = PhysFrame> + '_ {
@@ -94,14 +119,14 @@ impl ProcessAddressSpaceManager {
     pub fn destroy(&mut self, pid: Pid) -> Result<ProcessPageTable, PageTableError> {
         if self.current == Some(pid) { return Err(PageTableError::InvalidRoot); }
         let table = self.spaces.get(&pid).ok_or(PageTableError::ProcessMissing)?;
-        if table.user_mapping_count() != 0 { return Err(PageTableError::OutstandingMappings); }
+        if table.user_mapping_count() != 0 || table.kernel_mapping_count() != 0 { return Err(PageTableError::OutstandingMappings); }
         let table = self.spaces.remove(&pid).ok_or(PageTableError::ProcessMissing)?;
         self.root_owners.remove(&table.root_frame().start_address().as_u64()); Ok(table)
     }
     pub fn destroy_and_reclaim(&mut self, pid: Pid, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
         let table = self.spaces.get(&pid).ok_or(PageTableError::ProcessMissing)?;
         if self.current == Some(pid) { return Err(PageTableError::InvalidRoot); }
-        if table.user_mapping_count() != 0 { return Err(PageTableError::OutstandingMappings); }
+        if table.user_mapping_count() != 0 || table.kernel_mapping_count() != 0 { return Err(PageTableError::OutstandingMappings); }
         if table.private_frames().any(|frame| !frame_allocator.can_reclaim(frame)) { return Err(PageTableError::ReclaimConflict); }
         let table = self.spaces.remove(&pid).ok_or(PageTableError::ProcessMissing)?;
         let root = table.root_frame().start_address().as_u64(); self.root_owners.remove(&root);
@@ -114,11 +139,6 @@ impl Default for ProcessAddressSpaceManager { fn default() -> Self { Self::new()
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn duplicate_mapping_has_precise_error() {
-        let error = PageTableError::AlreadyMapped;
-        assert_eq!(error, PageTableError::AlreadyMapped);
-        assert_ne!(error, PageTableError::NotMapped);
-    }
+    fn duplicate_mapping_has_precise_error() { let error = PageTableError::AlreadyMapped; assert_eq!(error, PageTableError::AlreadyMapped); assert_ne!(error, PageTableError::NotMapped); }
 }
