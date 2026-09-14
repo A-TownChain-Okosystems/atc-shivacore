@@ -34,6 +34,8 @@ pub mod x86_64_page_table;
 pub mod x86_64_user_mapping;
 #[cfg(feature = "x86-boot")]
 pub mod x86_64_context_switch;
+#[cfg(feature = "x86-boot")]
+pub mod process_context;
 pub mod atcfs;
 pub mod vfs;
 pub mod syscall;
