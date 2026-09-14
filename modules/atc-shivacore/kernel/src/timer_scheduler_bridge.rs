@@ -3,6 +3,7 @@
 #![cfg(feature = "x86-boot")]
 
 use crate::kernel_stack::KernelStackManager;
+use crate::process_context::ProcessExecutionContext;
 use crate::process_scheduler::{ContextSwitchError, KernelStackActivator, ProcessScheduler};
 use crate::x86_64_context_switch::ContextStack;
 
@@ -23,6 +24,13 @@ impl<'a, A: KernelStackActivator> TimerSchedulerBridge<'a, A> {
     pub unsafe fn dispatch(&mut self, interrupted: *mut ContextStack) -> Result<*const ContextStack, ContextSwitchError> {
         let current_pid = self.scheduler.current().ok_or(ContextSwitchError::InvalidState)?;
         self.scheduler.preempt_from_timer(current_pid, interrupted, self.stacks, self.activator)
+    }
+
+    /// Enters the first process context. This is intentionally one-way.
+    pub unsafe fn activate_initial(&mut self, context: &ProcessExecutionContext) -> ! {
+        self.scheduler
+            .activate_context(context, self.stacks, self.activator)
+            .expect("initial process context activation failed")
     }
 
     pub fn scheduler(&self) -> &ProcessScheduler { self.scheduler }
