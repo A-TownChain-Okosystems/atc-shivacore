@@ -11,14 +11,25 @@ use crate::x86_64_address_space::{self, AddressSpaceSwitchError, PageTableRoot};
 use crate::x86_64_user_mapping::{map_user_page, validate_user_page, UserMappingError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PageTableError { InvalidPid, OutOfFrames, InvalidRoot, Mapping(UserMappingError), NotMapped, ProcessExists, ProcessMissing, RootOwnershipConflict, OutstandingMappings }
+pub enum PageTableError { InvalidPid, OutOfFrames, InvalidRoot, Mapping(UserMappingError), NotMapped, ProcessExists, ProcessMissing, RootOwnershipConflict, OutstandingMappings, ReclaimConflict }
 impl From<UserMappingError> for PageTableError { fn from(value: UserMappingError) -> Self { Self::Mapping(value) } }
+
+struct HierarchyFrameAllocator<'a> { allocator: &'a mut BootInfoFrameAllocator, owned: &'a mut BTreeSet<u64> }
+impl<'a> HierarchyFrameAllocator<'a> { fn new(allocator: &'a mut BootInfoFrameAllocator, owned: &'a mut BTreeSet<u64>) -> Self { Self { allocator, owned } } }
+unsafe impl<'a> FrameAllocator<Size4KiB> for HierarchyFrameAllocator<'a> {
+    fn allocate_frame(&mut self) -> Option<PhysFrame> {
+        let frame = self.allocator.allocate_frame()?;
+        if !self.owned.insert(frame.start_address().as_u64()) { let _ = self.allocator.reclaim_frame(frame); return None; }
+        Some(frame)
+    }
+}
 
 pub struct ProcessPageTable {
     pid: Pid,
     root_frame: PhysFrame,
     physical_memory_offset: VirtAddr,
     user_mappings: BTreeSet<u64>,
+    hierarchy_frames: BTreeSet<u64>,
 }
 impl ProcessPageTable {
     pub unsafe fn new(pid: Pid, physical_memory_offset: VirtAddr, active_root: &PageTable, frame_allocator: &mut BootInfoFrameAllocator) -> Result<Self, PageTableError> {
@@ -27,7 +38,7 @@ impl ProcessPageTable {
         let root_virt = physical_memory_offset + root_frame.start_address().as_u64();
         let root_ptr = root_virt.as_mut_ptr::<PageTable>(); root_ptr.write(PageTable::new());
         let root = &mut *root_ptr; for index in 256..512 { root[index] = active_root[index].clone(); }
-        Ok(Self { pid, root_frame, physical_memory_offset, user_mappings: BTreeSet::new() })
+        Ok(Self { pid, root_frame, physical_memory_offset, user_mappings: BTreeSet::new(), hierarchy_frames: BTreeSet::new() })
     }
     pub const fn pid(&self) -> Pid { self.pid }
     pub fn root_frame(&self) -> PhysFrame { self.root_frame }
@@ -35,13 +46,20 @@ impl ProcessPageTable {
     pub fn root_physical_address(&self) -> PhysAddr { self.root_frame.start_address() }
     pub fn user_mapping_count(&self) -> usize { self.user_mappings.len() }
     pub fn has_user_mapping(&self, virtual_address: u64) -> bool { self.user_mappings.contains(&virtual_address) }
+    pub fn hierarchy_frame_count(&self) -> usize { self.hierarchy_frames.len() }
     pub unsafe fn mapper(&mut self) -> OffsetPageTable<'static> { let root_virt = self.physical_memory_offset + self.root_frame.start_address().as_u64(); let root = &mut *root_virt.as_mut_ptr::<PageTable>(); OffsetPageTable::new(root, self.physical_memory_offset) }
     pub unsafe fn map_user_page(&mut self, page: Page<Size4KiB>, frame: PhysFrame, flags: PageFlags, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
         validate_user_page(page, flags)?;
         let virtual_address = page.start_address().as_u64();
         if self.user_mappings.contains(&virtual_address) { return Err(PageTableError::NotMapped); }
+        let before = self.hierarchy_frames.clone();
+        let mut tracked_allocator = HierarchyFrameAllocator::new(frame_allocator, &mut self.hierarchy_frames);
         let mut mapper = self.mapper();
-        map_user_page(&mut mapper, page, frame, flags, frame_allocator).map_err(Into::into)?;
+        if let Err(error) = map_user_page(&mut mapper, page, frame, flags, &mut tracked_allocator) {
+            let newly_allocated: BTreeSet<u64> = self.hierarchy_frames.difference(&before).copied().collect();
+            for address in newly_allocated { self.hierarchy_frames.remove(&address); let _ = frame_allocator.reclaim_frame(PhysFrame::containing_address(PhysAddr::new(address))); }
+            return Err(error.into());
+        }
         self.user_mappings.insert(virtual_address);
         Ok(())
     }
@@ -55,11 +73,14 @@ impl ProcessPageTable {
         Ok(frame)
     }
     pub fn validate_user_page(&self, page: Page<Size4KiB>, flags: PageFlags) -> Result<(), PageTableError> { validate_user_page(page, flags)?; Ok(()) }
+    fn reclaim_frames(self, allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
+        if !self.user_mappings.is_empty() { return Err(PageTableError::OutstandingMappings); }
+        for address in self.hierarchy_frames.iter().copied() { if !allocator.reclaim_frame(PhysFrame::containing_address(PhysAddr::new(address))) { return Err(PageTableError::ReclaimConflict); } }
+        if !allocator.reclaim_frame(self.root_frame) { return Err(PageTableError::ReclaimConflict); }
+        Ok(())
+    }
 }
 
-/// Owns all live process roots. `root_owners` is an explicit ownership ledger:
-/// a physical L4 frame may belong to exactly one live PID. Root frames are not
-/// returned to the boot allocator because that allocator has no reclamation API.
 pub struct ProcessAddressSpaceManager {
     spaces: BTreeMap<Pid, ProcessPageTable>,
     root_owners: BTreeMap<u64, Pid>,
@@ -80,16 +101,17 @@ impl ProcessAddressSpaceManager {
     pub fn contains(&self, pid: Pid) -> bool { self.spaces.contains_key(&pid) }
     pub fn root_owner(&self, physical_address: u64) -> Option<Pid> { self.root_owners.get(&physical_address).copied() }
     pub fn get_mut(&mut self, pid: Pid) -> Result<&mut ProcessPageTable, PageTableError> { self.spaces.get_mut(&pid).ok_or(PageTableError::ProcessMissing) }
-    /// A process address space cannot be destroyed while it still owns user mappings.
-    /// Root ownership is removed only after this invariant is satisfied.
     pub fn destroy(&mut self, pid: Pid) -> Result<ProcessPageTable, PageTableError> {
         if self.current == Some(pid) { return Err(PageTableError::InvalidRoot); }
         let table = self.spaces.get(&pid).ok_or(PageTableError::ProcessMissing)?;
         if table.user_mapping_count() != 0 { return Err(PageTableError::OutstandingMappings); }
         let table = self.spaces.remove(&pid).ok_or(PageTableError::ProcessMissing)?;
-        let root = table.root_frame().start_address().as_u64();
-        self.root_owners.remove(&root);
+        let root = table.root_frame().start_address().as_u64(); self.root_owners.remove(&root);
         Ok(table)
+    }
+    pub fn destroy_and_reclaim(&mut self, pid: Pid, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
+        let table = self.destroy(pid)?;
+        table.reclaim_frames(frame_allocator)
     }
 }
 impl Default for ProcessAddressSpaceManager { fn default() -> Self { Self::new() } }
