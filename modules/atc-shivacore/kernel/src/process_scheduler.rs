@@ -7,10 +7,12 @@ use x86_64::{structures::paging::PageTable, VirtAddr};
 use crate::ats1000::Pid;
 use crate::memory::BootInfoFrameAllocator;
 use crate::preemption::{PreemptionAction, TIMER_PREEMPTION};
+use crate::process_context::ProcessExecutionContext;
+use crate::x86_64_context_switch::switch_to_context;
 use crate::x86_64_page_table::{PageTableError, ProcessAddressSpaceManager};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ContextSwitchError { ProcessMissing, InvalidState, AddressSpace(PageTableError) }
+pub enum ContextSwitchError { ProcessMissing, InvalidState, AddressSpace(PageTableError), ContextRootMismatch }
 impl From<PageTableError> for ContextSwitchError { fn from(value: PageTableError) -> Self { Self::AddressSpace(value) } }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunState { Ready, Running }
@@ -36,21 +38,31 @@ impl ProcessScheduler {
         if let Err(e) = self.switch_to(next) { self.ready.push_front(next); return Err(e); }
         Ok(Some(next))
     }
-    /// Consumes a timer request only at a scheduler-defined safe point.
-    ///
-    /// The timer IRQ itself never calls this method and never changes CR3.
-    /// If the kernel is in a critical section the request remains pending.
     pub unsafe fn preemption_point(&mut self) -> Result<Option<Pid>, ContextSwitchError> {
-        if TIMER_PREEMPTION.preemption_point() != PreemptionAction::Reschedule {
-            return Ok(None);
-        }
-        if !TIMER_PREEMPTION.take_if_safe() {
-            return Ok(None);
-        }
+        if TIMER_PREEMPTION.preemption_point() != PreemptionAction::Reschedule { return Ok(None); }
+        if !TIMER_PREEMPTION.take_if_safe() { return Ok(None); }
         self.schedule_next()
     }
-    /// Architecture switch is the commit boundary: scheduler state is not
-    /// changed until the address-space switch succeeds.
+    /// Commits CR3 and scheduler state, then enters the validated user-mode
+    /// interrupt-return trampoline. This function never returns on success.
+    pub unsafe fn activate_context(&mut self, context: &ProcessExecutionContext) -> Result<!, ContextSwitchError> {
+        let pid = context.pid();
+        if !self.address_spaces.contains(pid) { return Err(ContextSwitchError::ProcessMissing); }
+        if self.current == Some(pid) || self.states.get(&pid).copied() != Some(RunState::Ready) { return Err(ContextSwitchError::InvalidState); }
+        let owned_root = self.address_spaces.root(pid)?;
+        if owned_root.physical_address() != context.root().physical_address() || owned_root.pid() != context.root().pid() {
+            return Err(ContextSwitchError::ContextRootMismatch);
+        }
+        context.validate_user_return().map_err(|_| ContextSwitchError::InvalidState)?;
+        if !self.ready.iter().any(|queued| *queued == pid) { return Err(ContextSwitchError::InvalidState); }
+
+        self.address_spaces.switch_to(pid)?;
+        self.ready.retain(|queued| *queued != pid);
+        if let Some(old) = self.current { self.states.insert(old, RunState::Ready); self.ready.push_back(old); }
+        self.states.insert(pid, RunState::Running);
+        self.current = Some(pid);
+        switch_to_context(context.context_stack())
+    }
     pub unsafe fn switch_to(&mut self, next: Pid) -> Result<(), ContextSwitchError> {
         if !self.address_spaces.contains(next) { return Err(ContextSwitchError::ProcessMissing); }
         if self.current == Some(next) { return Ok(()); }
@@ -63,8 +75,6 @@ impl ProcessScheduler {
         let pid = self.current.take().ok_or(ContextSwitchError::InvalidState)?;
         self.states.insert(pid, RunState::Ready); self.ready.push_back(pid); Ok(())
     }
-    /// Address-space destruction is performed before scheduler metadata is
-    /// removed, so a failed destroy leaves the scheduler state untouched.
     pub fn unregister_process(&mut self, pid: Pid) -> Result<(), ContextSwitchError> {
         if self.current == Some(pid) { return Err(ContextSwitchError::InvalidState); }
         self.address_spaces.destroy(pid)?;
@@ -78,14 +88,9 @@ impl ProcessScheduler {
 mod tests {
     use super::*;
     #[test]
-    fn starts_without_current_process() {
-        let scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new());
-        assert_eq!(scheduler.current(), None);
-    }
+    fn starts_without_current_process() { let scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new()); assert_eq!(scheduler.current(), None); }
     #[test]
-    fn yield_without_current_is_rejected_without_state_mutation() {
-        let mut scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new());
-        assert_eq!(scheduler.yield_current(), Err(ContextSwitchError::InvalidState));
-        assert_eq!(scheduler.current(), None);
-    }
+    fn yield_without_current_is_rejected_without_state_mutation() { let mut scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new()); assert_eq!(scheduler.yield_current(), Err(ContextSwitchError::InvalidState)); assert_eq!(scheduler.current(), None); }
+    #[test]
+    fn context_root_mismatch_is_distinct_from_process_missing() { assert_ne!(ContextSwitchError::ContextRootMismatch, ContextSwitchError::ProcessMissing); }
 }
