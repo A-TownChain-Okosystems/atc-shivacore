@@ -2,9 +2,7 @@
 //! Capability-bound memory operations.
 //!
 //! The policy layer validates process ownership and capabilities before a
-//! mapping is installed in the process registry. Hardware page-table mutation
-//! is delegated to the x86_64 mapping layer so authorization cannot be
-//! bypassed by the architecture backend.
+//! mapping is installed in the process registry and hardware page table.
 
 extern crate alloc;
 
@@ -16,7 +14,7 @@ use crate::process_address_space::{AddressSpaceError, ProcessAddressSpaces};
 #[cfg(feature = "x86-boot")]
 use crate::memory::BootInfoFrameAllocator;
 #[cfg(feature = "x86-boot")]
-use crate::x86_64_user_mapping::{map_user_page, validate_user_page, UserMappingError};
+use crate::x86_64_page_table::{PageTableError, ProcessPageTable};
 #[cfg(feature = "x86-boot")]
 use x86_64::structures::paging::{Page, PhysFrame, Size4KiB};
 
@@ -27,7 +25,7 @@ pub enum MemoryCapabilityError {
     AddressSpace(AddressSpaceError),
     Isolation(IsolationError),
     #[cfg(feature = "x86-boot")]
-    UserMapping(UserMappingError),
+    PageTable(PageTableError),
 }
 
 impl From<AddressSpaceError> for MemoryCapabilityError {
@@ -39,8 +37,8 @@ impl From<IsolationError> for MemoryCapabilityError {
 }
 
 #[cfg(feature = "x86-boot")]
-impl From<UserMappingError> for MemoryCapabilityError {
-    fn from(value: UserMappingError) -> Self { Self::UserMapping(value) }
+impl From<PageTableError> for MemoryCapabilityError {
+    fn from(value: PageTableError) -> Self { Self::PageTable(value) }
 }
 
 /// Coordinates capability authorization with the process-owned mapping policy.
@@ -66,10 +64,11 @@ impl<'a> CapabilityMemory<'a> {
     }
 
     #[cfg(feature = "x86-boot")]
-    /// Authorize and install one user-page mapping in the supplied process page table.
+    /// Authorize and install one user page in the process-owned page table.
     ///
-    /// The registry is updated only after the hardware mapping succeeds. This
-    /// prevents the policy layer from claiming a mapping which the MMU rejected.
+    /// The process page table creates its own mapper from its own L4 root;
+    /// callers cannot accidentally supply a mapper for another process.
+    /// The policy registry is updated only after hardware mapping succeeds.
     pub unsafe fn map_user_page(
         &mut self,
         pid: Pid,
@@ -77,27 +76,24 @@ impl<'a> CapabilityMemory<'a> {
         page: Page<Size4KiB>,
         frame: PhysFrame,
         flags: PageFlags,
-        mapper: &mut x86_64::structures::paging::OffsetPageTable<'static>,
+        page_table: &mut ProcessPageTable,
         frame_allocator: &mut BootInfoFrameAllocator,
     ) -> Result<(), MemoryCapabilityError> {
         self.require(pid, cap_id, Rights::WRITE)?;
-        let mapping = crate::x86_64_user_mapping::mapping_for_page(page, flags)?;
+        if page_table.pid() != pid {
+            return Err(MemoryCapabilityError::InvalidCapability);
+        }
 
-        // Refuse duplicate/overlapping policy mappings before touching hardware.
+        let mapping = crate::x86_64_user_mapping::mapping_for_page(page, flags)
+            .map_err(crate::x86_64_user_mapping::UserMappingError::into)?;
+
+        // Reserve the policy mapping first; hardware failure is rolled back.
         self.spaces.map(pid, mapping)?;
 
-        if let Err(error) = map_user_page(mapper, page, frame, flags, frame_allocator) {
-            // Roll back the registry if the hardware operation fails.
+        if let Err(error) = page_table.map_user_page(page, frame, flags, frame_allocator) {
             let _ = self.spaces.unmap(pid, mapping.start);
             return Err(error.into());
         }
-        Ok(())
-    }
-
-    #[cfg(feature = "x86-boot")]
-    pub fn validate_user_mapping(&self, pid: Pid, cap_id: CapId, page: Page<Size4KiB>, flags: PageFlags) -> Result<(), MemoryCapabilityError> {
-        self.require(pid, cap_id, Rights::WRITE)?;
-        validate_user_page(page, flags)?;
         Ok(())
     }
 
