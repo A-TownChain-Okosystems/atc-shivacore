@@ -56,12 +56,22 @@ impl KernelStackManager {
         let mut allocated: [Option<PhysFrame>; DEFAULT_STACK_PAGES] = [None; DEFAULT_STACK_PAGES];
         for index in 0..DEFAULT_STACK_PAGES {
             let frame = match frame_allocator.allocate_frame() { Some(frame) => frame, None => {
+                let table = address_spaces.get_mut(pid)?;
+                for rollback in 0..index {
+                    let page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + (rollback as u64) * PAGE_SIZE));
+                    let _ = table.unmap_kernel_page(page);
+                }
                 for rollback in allocated.into_iter().flatten() { let _ = frame_allocator.reclaim_frame(rollback); }
                 return Err(KernelStackError::OutOfFrames);
             }};
             allocated[index] = Some(frame);
             let page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + (index as u64) * PAGE_SIZE));
             if let Err(error) = address_spaces.get_mut(pid)?.map_kernel_page(page, frame, frame_allocator) {
+                let table = address_spaces.get_mut(pid)?;
+                for rollback in 0..index {
+                    let rollback_page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + (rollback as u64) * PAGE_SIZE));
+                    let _ = table.unmap_kernel_page(rollback_page);
+                }
                 for rollback in allocated.into_iter().flatten() { let _ = frame_allocator.reclaim_frame(rollback); }
                 return Err(error.into());
             }
@@ -73,8 +83,13 @@ impl KernelStackManager {
     }
 
     /// Removes all stack mappings and returns their physical frames to the allocator.
+    /// Ownership is checked before the first unmap so reclamation is fail-closed.
     pub unsafe fn reclaim(&mut self, pid: Pid, address_spaces: &mut ProcessAddressSpaceManager, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), KernelStackError> {
         let stack = *self.stacks.get(&pid).ok_or(KernelStackError::Unknown)?;
+        for index in 0..DEFAULT_STACK_PAGES {
+            let frame = stack.frame(index).ok_or(KernelStackError::OutstandingMappings)?;
+            if !frame_allocator.can_reclaim(frame) { return Err(KernelStackError::OwnershipConflict); }
+        }
         let table = address_spaces.get_mut(pid)?;
         let mut frames = [None; DEFAULT_STACK_PAGES];
         for index in 0..DEFAULT_STACK_PAGES {
