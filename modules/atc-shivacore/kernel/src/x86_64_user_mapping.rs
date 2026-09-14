@@ -3,9 +3,8 @@
 
 #![cfg(feature = "x86-boot")]
 
-use x86_64::structures::paging::{mapper::MapToError, Page, PageTableFlags, PhysFrame, Size4KiB};
+use x86_64::structures::paging::{mapper::MapToError, FrameAllocator, OffsetPageTable, Page, PageTableFlags, PhysFrame, Size4KiB};
 
-use crate::memory::BootInfoFrameAllocator;
 use crate::memory_isolation::{Mapping, PageFlags, PAGE_SIZE, USER_BASE, USER_LIMIT};
 use crate::x86_64_paging::to_page_table_flags;
 
@@ -34,16 +33,15 @@ pub fn mapping_for_page(page: Page<Size4KiB>, flags: PageFlags) -> Result<Mappin
     Ok(Mapping { start: page.start_address().as_u64(), size: PAGE_SIZE, flags })
 }
 
-/// Installs one user mapping into an already-created process mapper.
-///
-/// The physical frame must have been allocated/owned by the kernel's frame
-/// allocator. This function does not accept an arbitrary physical address.
-pub unsafe fn map_user_page(
-    mapper: &mut x86_64::structures::paging::OffsetPageTable<'static>,
+/// Installs one user mapping. The allocator is generic so callers can wrap
+/// the boot allocator and record every page-table hierarchy frame allocated by
+/// `map_to` without conflating those frames with the user data frame.
+pub unsafe fn map_user_page<A: FrameAllocator<Size4KiB>>(
+    mapper: &mut OffsetPageTable<'static>,
     page: Page<Size4KiB>,
     frame: PhysFrame,
     flags: PageFlags,
-    frame_allocator: &mut BootInfoFrameAllocator,
+    frame_allocator: &mut A,
 ) -> Result<(), UserMappingError> {
     let hardware_flags = validate_user_page(page, flags)?;
     mapper
