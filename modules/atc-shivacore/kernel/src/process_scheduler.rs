@@ -38,8 +38,6 @@ impl ProcessScheduler {
     pub fn context(&self, pid: Pid) -> Result<*const ContextStack, ContextSwitchError> { Ok(self.contexts.get(&pid).ok_or(ContextSwitchError::ContextMissing)?.stack_address as *const ContextStack) }
     pub fn context_snapshot(&self, pid: Pid) -> Result<ContextStack, ContextSwitchError> { Ok(self.contexts.get(&pid).ok_or(ContextSwitchError::ContextMissing)?.snapshot) }
 
-    /// Registers while the process address space is active. The validated copy
-    /// prevents dereferencing a private target stack before its CR3 is active.
     pub unsafe fn register_context(&mut self, context: &ProcessExecutionContext) -> Result<(), ContextSwitchError> {
         let pid = context.pid();
         if !self.address_spaces.contains(pid) { return Err(ContextSwitchError::ProcessMissing); }
@@ -55,12 +53,13 @@ impl ProcessScheduler {
     pub unsafe fn preemption_point(&mut self) -> Result<Option<Pid>, ContextSwitchError> { if TIMER_PREEMPTION.preemption_point() != PreemptionAction::Reschedule { return Ok(None); } if !TIMER_PREEMPTION.take_if_safe() { return Ok(None); } self.schedule_next() }
     pub unsafe fn bind_kernel_stack<A: KernelStackActivator>(&self, pid: Pid, stacks: &KernelStackManager, activator: &mut A) -> Result<(), ContextSwitchError> { if !self.address_spaces.contains(pid) { return Err(ContextSwitchError::ProcessMissing); } let top = stacks.top(pid).map_err(|_| ContextSwitchError::KernelStackMissing)?; activator.activate_kernel_stack(top).map_err(|_| ContextSwitchError::KernelStackActivation) }
 
-    /// Complete A -> B transition. B is validated from its registration-time
-    /// snapshot; its private stack is dereferenced only after CR3 == B.
+    /// Complete A -> B transition. All data belonging to A is snapshotted
+    /// before CR3 changes; after the switch, only B's address space is touched.
     pub unsafe fn preempt_from_timer<A: KernelStackActivator>(&mut self, current_pid: Pid, interrupted: *mut ContextStack, stacks: &KernelStackManager, activator: &mut A) -> Result<*const ContextStack, ContextSwitchError> {
         if self.current != Some(current_pid) || self.states.get(&current_pid).copied() != Some(RunState::Running) { return Err(ContextSwitchError::InvalidState); }
         if interrupted.is_null() { return Err(ContextSwitchError::InvalidTimerContext); }
-        (*interrupted).validate().map_err(|_| ContextSwitchError::InvalidTimerContext)?;
+        let current_snapshot = *interrupted;
+        current_snapshot.validate().map_err(|_| ContextSwitchError::InvalidTimerContext)?;
         let target = *self.ready.front().ok_or(ContextSwitchError::ContextMissing)?;
         if target == current_pid || self.states.get(&target).copied() != Some(RunState::Ready) { return Err(ContextSwitchError::InvalidState); }
         let target_saved = *self.contexts.get(&target).ok_or(ContextSwitchError::ContextMissing)?;
@@ -69,10 +68,11 @@ impl ProcessScheduler {
         activator.activate_kernel_stack(target_stack).map_err(|_| ContextSwitchError::KernelStackActivation)?;
         self.address_spaces.switch_to(target)?;
         let _ = self.ready.pop_front();
+        self.ready.push_back(current_pid);
         self.states.insert(current_pid, RunState::Ready);
         self.states.insert(target, RunState::Running);
         self.current = Some(target);
-        self.contexts.insert(current_pid, SavedProcessContext { stack_address: interrupted as u64, snapshot: *interrupted });
+        self.contexts.insert(current_pid, SavedProcessContext { stack_address: interrupted as u64, snapshot: current_snapshot });
         TIMER_PREEMPTION.clear();
         Ok(target_saved.stack_address as *const ContextStack)
     }
