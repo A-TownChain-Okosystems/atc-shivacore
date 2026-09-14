@@ -1,0 +1,60 @@
+name: x86_64 Timer Preemption E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/x86-timer-context-switch
+
+permissions:
+  contents: read
+
+jobs:
+  qemu-preemption:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+
+      - name: Install nightly toolchain
+        run: |
+          rustup toolchain install nightly
+          rustup component add llvm-tools-preview --toolchain nightly
+          rustup target add x86_64-unknown-none --toolchain nightly
+
+      - name: Build ShivaCore kernel
+        working-directory: modules/atc-shivacore/kernel
+        run: cargo +nightly build --features x86-boot --target x86_64-unknown-none
+
+      - name: Build BIOS image
+        working-directory: modules/atc-shivacore/boot
+        run: |
+          cargo +nightly run -- \
+            ../kernel/target/x86_64-unknown-none/debug/shivacore \
+            "$RUNNER_TEMP/shivacore-image"
+
+      - name: Run QEMU and verify A -> B -> A
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 20s qemu-system-x86_64 \
+            -drive format=raw,file="$RUNNER_TEMP/shivacore-image/shivacore-bios.img" \
+            -serial stdio \
+            -display none \
+            -no-reboot \
+            -no-shutdown \
+            > "$RUNNER_TEMP/qemu.log" 2>&1 || true
+
+          cat "$RUNNER_TEMP/qemu.log"
+
+          grep -q '^E2E_PREEMPTION_START$' "$RUNNER_TEMP/qemu.log"
+          grep -q '^E2E_PREEMPTION_A$' "$RUNNER_TEMP/qemu.log"
+          grep -q '^E2E_PREEMPTION_B$' "$RUNNER_TEMP/qemu.log"
+          grep -q '^E2E_PREEMPTION_A_AGAIN$' "$RUNNER_TEMP/qemu.log"
+          grep -q '^E2E_PREEMPTION_PASS$' "$RUNNER_TEMP/qemu.log"
+
+          echo "x86_64 Timer Preemption E2E: PASS"
