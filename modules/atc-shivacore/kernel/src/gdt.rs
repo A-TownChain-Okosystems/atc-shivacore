@@ -27,6 +27,8 @@ lazy_static! {
 struct Selectors {
     code_selector: SegmentSelector,
     tss_selector: SegmentSelector,
+    user_code_selector: SegmentSelector,
+    user_data_selector: SegmentSelector,
 }
 
 lazy_static! {
@@ -34,7 +36,9 @@ lazy_static! {
         let mut gdt = GlobalDescriptorTable::new();
         let code_selector = gdt.append(Descriptor::kernel_code_segment());
         let tss_selector = gdt.append(Descriptor::tss_segment(&*TSS.lock()));
-        (gdt, Selectors { code_selector, tss_selector })
+        let user_code_selector = gdt.append(Descriptor::user_code_segment());
+        let user_data_selector = gdt.append(Descriptor::user_data_segment());
+        (gdt, Selectors { code_selector, tss_selector, user_code_selector, user_data_selector })
     };
 }
 
@@ -45,9 +49,13 @@ pub fn set_kernel_stack_top(stack_top: u64) -> Result<(), ()> {
     Ok(())
 }
 
-pub fn kernel_stack_top() -> u64 {
-    TSS.lock().privilege_stack_table[0].as_u64()
-}
+pub fn kernel_stack_top() -> u64 { TSS.lock().privilege_stack_table[0].as_u64() }
+
+/// Selector used as CS when returning to a ring-3 process.
+pub fn user_code_selector() -> u16 { GDT.1.user_code_selector.0 }
+
+/// Selector used as SS when returning to a ring-3 process.
+pub fn user_data_selector() -> u16 { GDT.1.user_data_selector.0 }
 
 pub fn init() {
     GDT.0.load();
@@ -64,5 +72,12 @@ mod tests {
     fn stack_top_requires_nonzero_and_alignment() {
         assert_eq!(super::set_kernel_stack_top(0), Err(()));
         assert_eq!(super::set_kernel_stack_top(0x1001), Err(()));
+    }
+
+    #[test]
+    fn user_selectors_are_ring3() {
+        // GDT selector RPL is encoded in the low two bits.
+        assert_eq!(super::user_code_selector() & 0x3, 0x3);
+        assert_eq!(super::user_data_selector() & 0x3, 0x3);
     }
 }
