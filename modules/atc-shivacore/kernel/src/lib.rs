@@ -30,6 +30,8 @@ pub mod scheduler;
 pub mod ipc;
 pub mod memory_manager;
 pub mod memory_isolation;
+#[cfg(feature = "x86-boot")]
+pub mod x86_64_paging;
 pub mod atcfs;
 pub mod vfs;
 pub mod syscall;
