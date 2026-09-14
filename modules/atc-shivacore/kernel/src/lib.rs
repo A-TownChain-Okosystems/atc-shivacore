@@ -15,6 +15,7 @@ pub mod process;
 pub mod scheduler;
 #[cfg(feature = "x86-boot")]
 pub mod process_scheduler;
+pub mod preemption;
 pub mod ipc;
 pub mod memory_manager;
 pub mod memory_isolation;
