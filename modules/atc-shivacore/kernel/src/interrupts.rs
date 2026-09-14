@@ -1,16 +1,15 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 // ShivaCore — Interrupt Descriptor Table + PIC-Remapping.
-// K-Sprint 1: Breakpoint-, Double-Fault- und Page-Fault-Handler; die beiden
-// klassischen 8259-PICs werden von ihren BIOS-Default-Vektoren (0x08-0x0F,
-// 0x70-0x77 -- kollidieren mit CPU-Exceptions) auf 0x20-0x2F umgemappt.
 
 use crate::gdt;
 use crate::serial_println;
+use crate::x86_64_timer_entry::{current_context, entry_address, no_switch, HardwareContextFrame};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use shivacore::preemption::{InterruptFrame, TIMER_PREEMPTION};
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
+use x86_64::VirtAddr;
 
 pub const PIC_1_OFFSET: u8 = 0x20;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
@@ -26,12 +25,8 @@ pub enum InterruptIndex {
 }
 
 impl InterruptIndex {
-    fn as_u8(self) -> u8 {
-        self as u8
-    }
-    fn as_usize(self) -> usize {
-        usize::from(self.as_u8())
-    }
+    fn as_u8(self) -> u8 { self as u8 }
+    fn as_usize(self) -> usize { usize::from(self.as_u8()) }
 }
 
 lazy_static! {
@@ -43,21 +38,20 @@ lazy_static! {
             idt.double_fault
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+            // The timer uses a raw assembly entry because a scheduler-driven
+            // context switch must own the complete GPR + iret stack contract.
+            idt[InterruptIndex::Timer.as_u8()]
+                .set_handler_addr(VirtAddr::new(entry_address()));
         }
-        idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler);
         idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
         idt
     };
 }
 
-pub fn init_idt() {
-    IDT.load();
-}
+pub fn init_idt() { IDT.load(); }
 
 pub fn init_pics() {
-    unsafe {
-        PICS.lock().initialize();
-    }
+    unsafe { PICS.lock().initialize(); }
     x86_64::instructions::interrupts::enable();
 }
 
@@ -83,35 +77,47 @@ extern "x86-interrupt" fn page_fault_handler(
     serial_println!("{:#?}", stack_frame);
 }
 
-/// PIT/8259 timer interrupt. The handler only captures the architectural
-/// return frame and requests deferred rescheduling; it never touches CR3 or
-/// scheduler-owned process state while running in interrupt context.
-extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: InterruptStackFrame) {
-    let frame = InterruptFrame::new(
-        stack_frame.instruction_pointer().as_u64(),
-        u64::from(stack_frame.code_segment().0),
-        stack_frame.cpu_flags().bits(),
-        stack_frame.stack_pointer().as_u64(),
-        u64::from(stack_frame.stack_segment().0),
-    );
+/// Raw timer dispatcher called by the assembly entry after all GPRs have been
+/// saved. It deliberately does not switch CR3 or mutate scheduler state yet.
+/// That commit is the next layer: a scheduler callback may return a validated
+/// target ContextStack instead of `no_switch()`.
+#[no_mangle]
+pub extern "C" fn shivacore_timer_interrupt_dispatch(
+    frame: *mut HardwareContextFrame,
+) -> *const shivacore::x86_64_context_switch::ContextStack {
+    let result = if let Some(context) = current_context(frame) {
+        let interrupt_frame = InterruptFrame::new(
+            context.iret.rip,
+            context.iret.cs,
+            context.iret.rflags,
+            context.iret.rsp,
+            context.iret.ss,
+        );
 
-    if TIMER_PREEMPTION.record_frame(frame).is_ok() {
-        TIMER_PREEMPTION.request();
-    }
+        match TIMER_PREEMPTION.record_frame(interrupt_frame) {
+            Ok(()) => {
+                TIMER_PREEMPTION.request();
+                no_switch()
+            }
+            Err(_) => no_switch(),
+        }
+    } else {
+        no_switch()
+    };
 
-    // EOI is always issued after the preemption request has been recorded.
-    // No scheduler/CR3 operation is performed before returning from the IRQ.
+    // EOI is issued before returning to the assembly epilogue. No scheduler
+    // lock or CR3 operation is permitted in this IRQ dispatcher.
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
+    result
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
     use x86_64::instructions::port::Port;
     let mut port: Port<u8> = Port::new(0x60);
     let _scancode: u8 = unsafe { port.read() };
-    // Vollstaendiges Scancode->Keycode-Mapping folgt in einem spaeteren Sprint.
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
