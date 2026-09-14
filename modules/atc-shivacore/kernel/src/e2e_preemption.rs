@@ -11,8 +11,7 @@ use shivacore::memory_isolation::PageFlags;
 use shivacore::process_context::{KernelStack as ExecutionKernelStack, ProcessExecutionContext};
 use shivacore::process_scheduler::ProcessScheduler;
 use shivacore::x86_64_context_switch::{ContextStack, IretFrame, SavedRegisters};
-use shivacore::x86_64_page_table::ProcessAddressSpaceManager;
-use x86_64::{structures::paging::{Page, Size4KiB}, PageTable, PhysAddr, VirtAddr};
+use x86_64::{structures::paging::{Page, Size4KiB}, PageTable, VirtAddr};
 
 pub const PROCESS_A: Pid = Pid(1);
 pub const PROCESS_B: Pid = Pid(2);
@@ -21,9 +20,8 @@ pub const USER_CODE_B: u64 = 0x0000_0001_4020_0000;
 pub const USER_STACK_A: u64 = 0x0000_0001_8000_0000;
 pub const USER_STACK_B: u64 = 0x0000_0001_8020_0000;
 
-/// Builds the smallest real Ring-3 A/B setup. The function returns only after
-/// all process-owned page tables, kernel stacks, user code/stack mappings and
-/// saved contexts have been constructed and individually validated.
+/// Builds the smallest real Ring-3 A/B setup. Context validation is performed
+/// only while the corresponding process CR3 is active.
 pub unsafe fn prepare(
     scheduler: &mut ProcessScheduler,
     stacks: &mut KernelStackManager,
@@ -41,32 +39,25 @@ pub unsafe fn prepare(
     map_user_image(scheduler, PROCESS_A, USER_CODE_A, USER_STACK_A, frame_allocator, physical_memory_offset);
     map_user_image(scheduler, PROCESS_B, USER_CODE_B, USER_STACK_B, frame_allocator, physical_memory_offset);
 
-    let context_a = initialize_context(
-        PROCESS_A, stack_a, USER_CODE_A, USER_STACK_A,
-        physical_memory_offset,
-        0x1b, 0x23,
-    );
-    let context_b = initialize_context(
-        PROCESS_B, stack_b, USER_CODE_B, USER_STACK_B,
-        physical_memory_offset,
-        0x1b, 0x23,
-    );
+    let context_ptr_a = initialize_context(stack_a, USER_CODE_A, USER_STACK_A, physical_memory_offset, 0x1b, 0x23);
+    let context_ptr_b = initialize_context(stack_b, USER_CODE_B, USER_STACK_B, physical_memory_offset, 0x1b, 0x23);
 
-    // ProcessExecutionContext::new validates the ContextStack by dereferencing
-    // its process-private kernel-stack mapping. Validate each one while its
-    // owning CR3 is active; never dereference B while A's address space is live.
     scheduler.address_spaces_mut().switch_to(PROCESS_B).expect("E2E: activate B for validation failed");
-    let context_b = Box::new(context_b);
+    let root_b = scheduler.address_spaces().root(PROCESS_B).expect("E2E: root B missing");
     let context_b = Box::new(ProcessExecutionContext::new(
-        PROCESS_B, scheduler.address_spaces().root(PROCESS_B).unwrap(),
-        context_b.kernel_stack(), context_b.context_stack(),
+        PROCESS_B,
+        root_b,
+        ExecutionKernelStack::new(stack_b.base(), stack_b.top()),
+        context_ptr_b,
     ).expect("E2E: validate context B failed"));
 
     scheduler.address_spaces_mut().switch_to(PROCESS_A).expect("E2E: activate A for validation failed");
-    let context_a = Box::new(context_a);
+    let root_a = scheduler.address_spaces().root(PROCESS_A).expect("E2E: root A missing");
     let context_a = Box::new(ProcessExecutionContext::new(
-        PROCESS_A, scheduler.address_spaces().root(PROCESS_A).unwrap(),
-        context_a.kernel_stack(), context_a.context_stack(),
+        PROCESS_A,
+        root_a,
+        ExecutionKernelStack::new(stack_a.base(), stack_a.top()),
+        context_ptr_a,
     ).expect("E2E: validate context A failed"));
 
     scheduler.register_context(&context_a).expect("E2E: register context A failed");
@@ -90,23 +81,20 @@ unsafe fn map_user_image(
     table.map_user_page(code_page, code_frame, PageFlags::READ.union(PageFlags::EXECUTE).union(PageFlags::USER), frame_allocator).expect("E2E: code mapping failed");
     table.map_user_page(stack_page, stack_frame, PageFlags::READ.union(PageFlags::WRITE).union(PageFlags::USER), frame_allocator).expect("E2E: stack mapping failed");
 
-    // `EB FE` is a two-byte infinite loop. The timer interrupt is the only
-    // mechanism that leaves the loop, so the observed A->B->A transition is
-    // genuinely timer-driven.
+    // EB FE = jmp $; the timer IRQ is the only exit path.
     let code_ptr = (physical_memory_offset + code_frame.start_address().as_u64()).as_mut_ptr::<u8>();
     core::ptr::write(code_ptr, 0xEB);
     core::ptr::write(code_ptr.add(1), 0xFE);
 }
 
 unsafe fn initialize_context(
-    pid: Pid,
     stack: KernelStack,
     user_rip: u64,
     user_stack: u64,
     physical_memory_offset: VirtAddr,
     cs: u16,
     ss: u16,
-) -> ProcessExecutionContext {
+) -> *const ContextStack {
     let context_address = stack.top() - size_of::<ContextStack>() as u64;
     assert_eq!(context_address & 0xF, 0, "E2E: context stack must be 16-byte aligned");
     let last_frame = stack.frame(DEFAULT_STACK_PAGES - 1).expect("E2E: last kernel-stack frame missing");
@@ -125,9 +113,5 @@ unsafe fn initialize_context(
             ss: ss as u64,
         },
     });
-
-    // Construct the metadata object after the physical backing is initialized.
-    // Validation of the actual ContextStack happens in `prepare` under the
-    // corresponding CR3.
-    core::mem::MaybeUninit::zeroed().assume_init()
+    context_ptr
 }
