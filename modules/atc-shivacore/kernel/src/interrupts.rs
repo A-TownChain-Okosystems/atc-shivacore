@@ -8,6 +8,7 @@ use crate::gdt;
 use crate::serial_println;
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
+use shivacore::preemption::{InterruptFrame, TIMER_PREEMPTION};
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
@@ -82,7 +83,24 @@ extern "x86-interrupt" fn page_fault_handler(
     serial_println!("{:#?}", stack_frame);
 }
 
-extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+/// PIT/8259 timer interrupt. The handler only captures the architectural
+/// return frame and requests deferred rescheduling; it never touches CR3 or
+/// scheduler-owned process state while running in interrupt context.
+extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: InterruptStackFrame) {
+    let frame = InterruptFrame::new(
+        stack_frame.instruction_pointer().as_u64(),
+        u64::from(stack_frame.code_segment().0),
+        stack_frame.cpu_flags().bits(),
+        stack_frame.stack_pointer().as_u64(),
+        u64::from(stack_frame.stack_segment().0),
+    );
+
+    if TIMER_PREEMPTION.record_frame(frame).is_ok() {
+        TIMER_PREEMPTION.request();
+    }
+
+    // EOI is always issued after the preemption request has been recorded.
+    // No scheduler/CR3 operation is performed before returning from the IRQ.
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
