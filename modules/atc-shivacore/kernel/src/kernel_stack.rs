@@ -13,17 +13,7 @@ pub const PAGE_SIZE: u64 = 4096;
 pub const DEFAULT_STACK_PAGES: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KernelStackError {
-    InvalidPid,
-    AlreadyExists,
-    ProcessMissing,
-    InvalidRange,
-    OutOfFrames,
-    Mapping(PageTableError),
-    Unknown,
-    OwnershipConflict,
-    OutstandingMappings,
-}
+pub enum KernelStackError { InvalidPid, AlreadyExists, ProcessMissing, InvalidRange, OutOfFrames, Mapping(PageTableError), Unknown, OwnershipConflict, OutstandingMappings }
 impl From<PageTableError> for KernelStackError { fn from(value: PageTableError) -> Self { Self::Mapping(value) } }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,10 +32,7 @@ impl KernelStack {
     pub const fn top(&self) -> u64 { self.top }
     pub const fn pages(&self) -> usize { self.pages }
     pub fn contains(&self, address: u64) -> bool { address >= self.base && address < self.top }
-    pub fn frame(&self, index: usize) -> Option<PhysFrame> {
-        if index >= self.pages { return None; }
-        Some(PhysFrame::containing_address(PhysAddr::new(self.frames[index])))
-    }
+    pub fn frame(&self, index: usize) -> Option<PhysFrame> { if index >= self.pages { None } else { Some(PhysFrame::containing_address(PhysAddr::new(self.frames[index]))) } }
 }
 
 pub struct KernelStackManager { stacks: BTreeMap<Pid, KernelStack> }
@@ -54,73 +41,47 @@ impl KernelStackManager {
     pub fn get(&self, pid: Pid) -> Option<&KernelStack> { self.stacks.get(&pid) }
     pub fn contains(&self, pid: Pid) -> bool { self.stacks.contains_key(&pid) }
 
-    /// Creates a four-page kernel stack with one unmapped guard page immediately below it.
-    /// The virtual range is deterministic per PID but is rejected on overflow/collision.
-    pub unsafe fn allocate(
-        &mut self,
-        pid: Pid,
-        address_spaces: &mut ProcessAddressSpaceManager,
-        frame_allocator: &mut BootInfoFrameAllocator,
-    ) -> Result<KernelStack, KernelStackError> {
+    /// Creates a four-page kernel-only stack with one unmapped guard page below it.
+    /// The stack lives in the canonical kernel half and is never mapped USER-accessible.
+    pub unsafe fn allocate(&mut self, pid: Pid, address_spaces: &mut ProcessAddressSpaceManager, frame_allocator: &mut BootInfoFrameAllocator) -> Result<KernelStack, KernelStackError> {
         if pid.0 == 0 { return Err(KernelStackError::InvalidPid); }
         if self.stacks.contains_key(&pid) { return Err(KernelStackError::AlreadyExists); }
         if !address_spaces.contains(pid) { return Err(KernelStackError::ProcessMissing); }
-
-        let base = 0x0000_4000_0000_0000u64
-            .checked_add((pid.0 as u64).checked_mul(0x20_0000).ok_or(KernelStackError::InvalidRange)?)
-            .ok_or(KernelStackError::InvalidRange)?;
+        let base = 0xffff_9000_0000_0000u64.checked_add((pid.0 as u64).checked_mul(0x20_0000).ok_or(KernelStackError::InvalidRange)?).ok_or(KernelStackError::InvalidRange)?;
         let guard_start = base.checked_sub(PAGE_SIZE).ok_or(KernelStackError::InvalidRange)?;
         let top = base.checked_add((DEFAULT_STACK_PAGES as u64) * PAGE_SIZE).ok_or(KernelStackError::InvalidRange)?;
-        if top >= 0x0000_8000_0000_0000 || base & 0xfff != 0 { return Err(KernelStackError::InvalidRange); }
+        if base & 0xfff != 0 || top <= base || top > 0xffff_ffff_ffff_f000 { return Err(KernelStackError::InvalidRange); }
 
         let mut frames = [0u64; DEFAULT_STACK_PAGES];
-        let mut mapped = 0usize;
         let mut allocated: [Option<PhysFrame>; DEFAULT_STACK_PAGES] = [None; DEFAULT_STACK_PAGES];
-        let page_flags = crate::memory_isolation::PageFlags::READ
-            | crate::memory_isolation::PageFlags::WRITE
-            | crate::memory_isolation::PageFlags::USER;
-
         for index in 0..DEFAULT_STACK_PAGES {
-            let frame = frame_allocator.allocate_frame().ok_or(KernelStackError::OutOfFrames)?;
+            let frame = match frame_allocator.allocate_frame() { Some(frame) => frame, None => {
+                for rollback in allocated.into_iter().flatten() { let _ = frame_allocator.reclaim_frame(rollback); }
+                return Err(KernelStackError::OutOfFrames);
+            }};
             allocated[index] = Some(frame);
             let page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + (index as u64) * PAGE_SIZE));
-            if let Err(error) = address_spaces.get_mut(pid)?.map_user_page(page, frame, page_flags, frame_allocator) {
-                for rollback in 0..=index {
-                    if let Some(frame) = allocated[rollback] {
-                        let page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + (rollback as u64) * PAGE_SIZE));
-                        let _ = address_spaces.get_mut(pid).and_then(|table| table.unmap_user_page(page).ok());
-                        let _ = frame_allocator.reclaim_frame(frame);
-                    }
-                }
+            if let Err(error) = address_spaces.get_mut(pid)?.map_kernel_page(page, frame, frame_allocator) {
+                for rollback in allocated.into_iter().flatten() { let _ = frame_allocator.reclaim_frame(rollback); }
                 return Err(error.into());
             }
             frames[index] = frame.start_address().as_u64();
-            mapped += 1;
         }
-
-        let stack = KernelStack { pid, guard_start, base, top, pages: mapped, frames };
+        let stack = KernelStack { pid, guard_start, base, top, pages: DEFAULT_STACK_PAGES, frames };
         self.stacks.insert(pid, stack);
         Ok(stack)
     }
 
     /// Removes all stack mappings and returns their physical frames to the allocator.
-    pub unsafe fn reclaim(
-        &mut self,
-        pid: Pid,
-        address_spaces: &mut ProcessAddressSpaceManager,
-        frame_allocator: &mut BootInfoFrameAllocator,
-    ) -> Result<(), KernelStackError> {
+    pub unsafe fn reclaim(&mut self, pid: Pid, address_spaces: &mut ProcessAddressSpaceManager, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), KernelStackError> {
         let stack = *self.stacks.get(&pid).ok_or(KernelStackError::Unknown)?;
-        if stack.pages != DEFAULT_STACK_PAGES { return Err(KernelStackError::OutstandingMappings); }
         let table = address_spaces.get_mut(pid)?;
         let mut frames = [None; DEFAULT_STACK_PAGES];
         for index in 0..DEFAULT_STACK_PAGES {
             let page = Page::<Size4KiB>::containing_address(VirtAddr::new(stack.base + (index as u64) * PAGE_SIZE));
-            frames[index] = Some(table.unmap_user_page(page)?);
+            frames[index] = Some(table.unmap_kernel_page(page)?);
         }
-        for frame in frames.into_iter().flatten() {
-            if !frame_allocator.reclaim_frame(frame) { return Err(KernelStackError::OwnershipConflict); }
-        }
+        for frame in frames.into_iter().flatten() { if !frame_allocator.reclaim_frame(frame) { return Err(KernelStackError::OwnershipConflict); } }
         self.stacks.remove(&pid);
         Ok(())
     }
@@ -132,7 +93,7 @@ mod tests {
     use super::*;
     #[test]
     fn stack_range_has_unmapped_guard_below_base() {
-        let stack = KernelStack { pid: Pid(1), guard_start: 0x4000_3fff_fff0_0000, base: 0x4000_4000_0000_0000, top: 0x4000_4000_0000_4000, pages: 4, frames: [0x1000,0x2000,0x3000,0x4000] };
+        let stack = KernelStack { pid: Pid(1), guard_start: 0xffff_8fff_ffff_f000, base: 0xffff_9000_0000_0000, top: 0xffff_9000_0000_4000, pages: 4, frames: [0x1000,0x2000,0x3000,0x4000] };
         assert_eq!(stack.top - stack.base, 4 * PAGE_SIZE);
         assert_eq!(stack.base - stack.guard_start, PAGE_SIZE);
         assert!(!stack.contains(stack.guard_start));
