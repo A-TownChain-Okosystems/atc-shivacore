@@ -2,16 +2,10 @@
 //! Explicit bridge between the x86 timer entry and the process scheduler.
 #![cfg(feature = "x86-boot")]
 
-use crate::ats1000::Pid;
 use crate::kernel_stack::KernelStackManager;
 use crate::process_scheduler::{ContextSwitchError, KernelStackActivator, ProcessScheduler};
 use crate::x86_64_context_switch::ContextStack;
 
-/// Owns the reference boundary required by the timer dispatcher.
-///
-/// The bridge is deliberately not global: the boot/runtime layer owns it and
-/// decides how the interrupt entry obtains access to the scheduler. This keeps
-/// scheduler state explicit instead of hiding it behind ambient mutable state.
 pub struct TimerSchedulerBridge<'a, A: KernelStackActivator> {
     scheduler: &'a mut ProcessScheduler,
     stacks: &'a KernelStackManager,
@@ -19,27 +13,16 @@ pub struct TimerSchedulerBridge<'a, A: KernelStackActivator> {
 }
 
 impl<'a, A: KernelStackActivator> TimerSchedulerBridge<'a, A> {
-    pub fn new(
-        scheduler: &'a mut ProcessScheduler,
-        stacks: &'a KernelStackManager,
-        activator: &'a mut A,
-    ) -> Self {
+    pub fn new(scheduler: &'a mut ProcessScheduler, stacks: &'a KernelStackManager, activator: &'a mut A) -> Self {
         Self { scheduler, stacks, activator }
     }
 
-    /// Performs one complete timer-side A -> B transition and returns the
-    /// target context for the assembly restore path.
-    pub unsafe fn dispatch(
-        &mut self,
-        current_pid: Pid,
-        interrupted: *mut ContextStack,
-    ) -> Result<*const ContextStack, ContextSwitchError> {
-        self.scheduler.preempt_from_timer(
-            current_pid,
-            interrupted,
-            self.stacks,
-            self.activator,
-        )
+    /// Performs one complete timer-side A -> B transition. The current PID is
+    /// taken from scheduler state so the IRQ path cannot supply a mismatching
+    /// process identity.
+    pub unsafe fn dispatch(&mut self, interrupted: *mut ContextStack) -> Result<*const ContextStack, ContextSwitchError> {
+        let current_pid = self.scheduler.current().ok_or(ContextSwitchError::InvalidState)?;
+        self.scheduler.preempt_from_timer(current_pid, interrupted, self.stacks, self.activator)
     }
 
     pub fn scheduler(&self) -> &ProcessScheduler { self.scheduler }
