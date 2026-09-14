@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 //! Capability-bound memory operations.
-//!
-//! The policy layer validates process ownership and capabilities before a
-//! mapping is installed in the process registry and hardware page table.
 
 extern crate alloc;
 
@@ -41,7 +38,6 @@ impl From<PageTableError> for MemoryCapabilityError {
     fn from(value: PageTableError) -> Self { Self::PageTable(value) }
 }
 
-/// Coordinates capability authorization with the process-owned mapping policy.
 pub struct CapabilityMemory<'a> {
     pub capabilities: &'a CapabilityTable,
     pub spaces: &'a mut ProcessAddressSpaces,
@@ -64,11 +60,6 @@ impl<'a> CapabilityMemory<'a> {
     }
 
     #[cfg(feature = "x86-boot")]
-    /// Authorize and install one user page in the process-owned page table.
-    ///
-    /// The process page table creates its own mapper from its own L4 root;
-    /// callers cannot accidentally supply a mapper for another process.
-    /// The policy registry is updated only after hardware mapping succeeds.
     pub unsafe fn map_user_page(
         &mut self,
         pid: Pid,
@@ -86,8 +77,6 @@ impl<'a> CapabilityMemory<'a> {
 
         let mapping = crate::x86_64_user_mapping::mapping_for_page(page, flags)
             .map_err(crate::x86_64_user_mapping::UserMappingError::into)?;
-
-        // Reserve the policy mapping first; hardware failure is rolled back.
         self.spaces.map(pid, mapping)?;
 
         if let Err(error) = page_table.map_user_page(page, frame, flags, frame_allocator) {
@@ -95,6 +84,33 @@ impl<'a> CapabilityMemory<'a> {
             return Err(error.into());
         }
         Ok(())
+    }
+
+    #[cfg(feature = "x86-boot")]
+    /// Unmaps a user page from the process-owned page table and policy registry.
+    /// The physical frame is returned to the caller and is not recycled here.
+    pub unsafe fn unmap_user_page(
+        &mut self,
+        pid: Pid,
+        cap_id: CapId,
+        page: Page<Size4KiB>,
+        page_table: &mut ProcessPageTable,
+    ) -> Result<PhysFrame, MemoryCapabilityError> {
+        self.require(pid, cap_id, Rights::WRITE)?;
+        if page_table.pid() != pid {
+            return Err(MemoryCapabilityError::InvalidCapability);
+        }
+
+        let mapping = self.spaces.unmap(pid, page.start_address().as_u64())?;
+        let frame = match page_table.unmap_user_page(page) {
+            Ok(frame) => frame,
+            Err(error) => {
+                // Restore the policy entry if the hardware unmap failed.
+                let _ = self.spaces.map(pid, mapping);
+                return Err(error.into());
+            }
+        };
+        Ok(frame)
     }
 
     fn require(&self, pid: Pid, cap_id: CapId, rights: Rights) -> Result<(), MemoryCapabilityError> {
