@@ -18,6 +18,7 @@ pub mod memory_manager;
 pub mod memory_isolation;
 pub mod process_address_space;
 pub mod memory_capability;
+pub mod frame_ownership;
 #[cfg(feature = "x86-boot")]
 pub mod memory;
 #[cfg(feature = "x86-boot")]
