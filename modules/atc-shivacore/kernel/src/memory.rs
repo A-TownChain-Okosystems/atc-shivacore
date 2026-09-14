@@ -1,24 +1,14 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 //! x86_64 physical-frame allocator and OffsetPageTable bootstrap.
-//!
-//! This module is used by the boot binary. It creates the first real page-table
-//! mapper and allocates only frames reported as USABLE by the bootloader.
 
+extern crate alloc;
+use alloc::collections::BTreeSet;
 use bootloader_api::info::{MemoryRegionKind, MemoryRegions};
 use x86_64::{
-    structures::paging::{
-        mapper::MapToError,
-        FrameAllocator, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB,
-    },
+    structures::paging::{mapper::MapToError, FrameAllocator, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB},
     PhysAddr, VirtAddr,
 };
 
-/// Initializes an OffsetPageTable from the level-4 table exposed through the
-/// bootloader's physical-memory mapping.
-///
-/// # Safety
-/// `physical_memory_offset` must be the offset supplied by bootloader_api and
-/// the active level-4 page table must remain valid for the lifetime of the mapper.
 pub unsafe fn init(physical_memory_offset: VirtAddr) -> OffsetPageTable<'static> {
     let level_4_table = active_level_4_table(physical_memory_offset);
     OffsetPageTable::new(level_4_table, physical_memory_offset)
@@ -31,19 +21,18 @@ unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> &'static mut
     &mut *(virt.as_mut_ptr())
 }
 
-/// Frame allocator backed exclusively by bootloader-reported usable RAM.
+/// Bootloader-backed allocator with an explicit reclaimed-frame pool.
+/// Reclamation is accepted only from an owner that has already completed its
+/// mapping/lifetime checks; the allocator itself does not infer ownership.
 pub struct BootInfoFrameAllocator {
     memory_regions: &'static MemoryRegions,
     next: usize,
+    recycled: BTreeSet<u64>,
 }
 
 impl BootInfoFrameAllocator {
-    /// # Safety
-    /// The memory-region table must be valid for the allocator lifetime and
-    /// the caller must ensure that frames returned by this allocator are not
-    /// concurrently handed to another allocator.
     pub unsafe fn init(memory_regions: &'static MemoryRegions) -> Self {
-        Self { memory_regions, next: 0 }
+        Self { memory_regions, next: 0, recycled: BTreeSet::new() }
     }
 
     fn usable_frames(&self) -> impl Iterator<Item = PhysFrame> + '_ {
@@ -51,28 +40,30 @@ impl BootInfoFrameAllocator {
             .iter()
             .filter(|region| region.kind == MemoryRegionKind::Usable)
             .flat_map(|region| {
-                let start = region.start;
-                let end = region.end;
-                (start..end).step_by(4096).map(|addr| {
-                    PhysFrame::containing_address(PhysAddr::new(addr))
-                })
+                (region.start..region.end)
+                    .step_by(4096)
+                    .map(|addr| PhysFrame::containing_address(PhysAddr::new(addr)))
             })
     }
+
+    pub fn reclaim_frame(&mut self, frame: PhysFrame) -> bool {
+        self.recycled.insert(frame.start_address().as_u64())
+    }
+
+    pub fn recycled_count(&self) -> usize { self.recycled.len() }
 }
 
 unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
     fn allocate_frame(&mut self) -> Option<PhysFrame> {
+        if let Some(address) = self.recycled.pop_first() {
+            return Some(PhysFrame::containing_address(PhysAddr::new(address)));
+        }
         let frame = self.usable_frames().nth(self.next);
         self.next = self.next.saturating_add(1);
         frame
     }
 }
 
-/// Map a single page with the requested flags.
-///
-/// The caller must ensure that `page` belongs to an address space that is
-/// intended to receive the mapping and that the selected physical frame is
-/// owned by the allocator.
 pub unsafe fn map_page(
     mapper: &mut OffsetPageTable<'static>,
     page: Page<Size4KiB>,
@@ -87,7 +78,5 @@ pub unsafe fn map_page(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn frame_size_is_four_kib() {
-        assert_eq!(4096usize, 4 * 1024);
-    }
+    fn frame_size_is_four_kib() { assert_eq!(4096usize, 4 * 1024); }
 }
