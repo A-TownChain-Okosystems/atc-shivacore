@@ -19,9 +19,13 @@ pub mod memory_isolation;
 pub mod process_address_space;
 pub mod memory_capability;
 #[cfg(feature = "x86-boot")]
+pub mod memory;
+#[cfg(feature = "x86-boot")]
 pub mod x86_64_paging;
 #[cfg(feature = "x86-boot")]
 pub mod x86_64_address_space;
+#[cfg(feature = "x86-boot")]
+pub mod x86_64_page_table;
 pub mod atcfs;
 pub mod vfs;
 pub mod syscall;
