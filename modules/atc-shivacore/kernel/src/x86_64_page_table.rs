@@ -11,7 +11,7 @@ use crate::x86_64_address_space::{self, AddressSpaceSwitchError, PageTableRoot};
 use crate::x86_64_user_mapping::{map_user_page, validate_user_page, UserMappingError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PageTableError { InvalidPid, OutOfFrames, InvalidRoot, Mapping(UserMappingError), NotMapped, ProcessExists, ProcessMissing, RootOwnershipConflict, OutstandingMappings, ReclaimConflict }
+pub enum PageTableError { InvalidPid, OutOfFrames, InvalidRoot, Mapping(UserMappingError), NotMapped, AlreadyMapped, ProcessExists, ProcessMissing, RootOwnershipConflict, OutstandingMappings, ReclaimConflict }
 impl From<UserMappingError> for PageTableError { fn from(value: UserMappingError) -> Self { Self::Mapping(value) } }
 
 struct HierarchyFrameAllocator<'a> { allocator: &'a mut BootInfoFrameAllocator, owned: &'a mut BTreeSet<u64> }
@@ -51,7 +51,7 @@ impl ProcessPageTable {
     pub unsafe fn map_user_page(&mut self, page: Page<Size4KiB>, frame: PhysFrame, flags: PageFlags, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
         validate_user_page(page, flags)?;
         let virtual_address = page.start_address().as_u64();
-        if self.user_mappings.contains(&virtual_address) { return Err(PageTableError::NotMapped); }
+        if self.user_mappings.contains(&virtual_address) { return Err(PageTableError::AlreadyMapped); }
         let before = self.hierarchy_frames.clone();
         let mut tracked_allocator = HierarchyFrameAllocator::new(frame_allocator, &mut self.hierarchy_frames);
         let mut mapper = self.mapper();
@@ -98,8 +98,6 @@ impl ProcessAddressSpaceManager {
         let table = self.spaces.remove(&pid).ok_or(PageTableError::ProcessMissing)?;
         self.root_owners.remove(&table.root_frame().start_address().as_u64()); Ok(table)
     }
-    /// Completes destruction only after every private root/hierarchy frame is
-    /// known to be reclaimable, preventing partial allocator mutation.
     pub fn destroy_and_reclaim(&mut self, pid: Pid, frame_allocator: &mut BootInfoFrameAllocator) -> Result<(), PageTableError> {
         let table = self.spaces.get(&pid).ok_or(PageTableError::ProcessMissing)?;
         if self.current == Some(pid) { return Err(PageTableError::InvalidRoot); }
@@ -112,3 +110,15 @@ impl ProcessAddressSpaceManager {
     }
 }
 impl Default for ProcessAddressSpaceManager { fn default() -> Self { Self::new() } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_mapping_has_precise_error() {
+        let error = PageTableError::AlreadyMapped;
+        assert_eq!(error, PageTableError::AlreadyMapped);
+        assert_ne!(error, PageTableError::NotMapped);
+    }
+}
