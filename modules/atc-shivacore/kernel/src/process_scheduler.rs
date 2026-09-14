@@ -14,8 +14,6 @@ impl From<PageTableError> for ContextSwitchError { fn from(value: PageTableError
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunState { Ready, Running }
 
-/// Scheduler-owned runnable state. A PID becomes runnable only after its
-/// address space has been registered and its private CR3 root exists.
 pub struct ProcessScheduler {
     address_spaces: ProcessAddressSpaceManager,
     states: BTreeMap<Pid, RunState>,
@@ -37,6 +35,8 @@ impl ProcessScheduler {
         if let Err(e) = self.switch_to(next) { self.ready.push_front(next); return Err(e); }
         Ok(Some(next))
     }
+    /// Architecture switch is the commit boundary: scheduler state is not
+    /// changed until the address-space switch succeeds.
     pub unsafe fn switch_to(&mut self, next: Pid) -> Result<(), ContextSwitchError> {
         if !self.address_spaces.contains(next) { return Err(ContextSwitchError::ProcessMissing); }
         if self.current == Some(next) { return Ok(()); }
@@ -49,11 +49,29 @@ impl ProcessScheduler {
         let pid = self.current.take().ok_or(ContextSwitchError::InvalidState)?;
         self.states.insert(pid, RunState::Ready); self.ready.push_back(pid); Ok(())
     }
+    /// Address-space destruction is performed before scheduler metadata is
+    /// removed, so a failed destroy leaves the scheduler state untouched.
     pub fn unregister_process(&mut self, pid: Pid) -> Result<(), ContextSwitchError> {
         if self.current == Some(pid) { return Err(ContextSwitchError::InvalidState); }
-        self.ready.retain(|queued| *queued != pid); self.states.remove(&pid); self.address_spaces.destroy(pid)?; Ok(())
+        self.address_spaces.destroy(pid)?;
+        self.ready.retain(|queued| *queued != pid);
+        self.states.remove(&pid);
+        Ok(())
     }
 }
 
 #[cfg(test)]
-mod tests { use super::*; #[test] fn starts_without_current_process() { let scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new()); assert_eq!(scheduler.current(), None); } }
+mod tests {
+    use super::*;
+    #[test]
+    fn starts_without_current_process() {
+        let scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new());
+        assert_eq!(scheduler.current(), None);
+    }
+    #[test]
+    fn yield_without_current_is_rejected_without_state_mutation() {
+        let mut scheduler = ProcessScheduler::new(ProcessAddressSpaceManager::new());
+        assert_eq!(scheduler.yield_current(), Err(ContextSwitchError::InvalidState));
+        assert_eq!(scheduler.current(), None);
+    }
+}
