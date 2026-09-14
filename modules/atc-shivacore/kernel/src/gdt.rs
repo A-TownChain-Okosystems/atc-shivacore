@@ -39,7 +39,6 @@ lazy_static! {
 }
 
 /// Updates RSP0, the ring-0 stack used by the CPU for CPL3 -> CPL0 transitions.
-/// The caller must provide the exclusive, 16-byte-aligned top of a mapped kernel stack.
 pub fn set_kernel_stack_top(stack_top: u64) -> Result<(), ()> {
     if stack_top == 0 || stack_top & 0xf != 0 { return Err(()); }
     TSS.lock().privilege_stack_table[0] = VirtAddr::new(stack_top);
