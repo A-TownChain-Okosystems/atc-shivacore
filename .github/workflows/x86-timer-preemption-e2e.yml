@@ -61,6 +61,7 @@ jobs:
               "E2E_PREEMPTION_A",
               "E2E_PREEMPTION_B",
               "E2E_PREEMPTION_A_AGAIN",
+              "E2E_PREEMPTION_PASS",
           ]
 
           cursor = -1
@@ -70,13 +71,13 @@ jobs:
               except StopIteration:
                   raise SystemExit(f"missing ordered marker: {marker}")
 
-          print("ordered Ring-3 sequence verified")
+          print("ordered Ring-3 sequence and PASS marker verified")
           PY
 
           grep -q '^E2E_PREEMPTION_START$' "$RUNNER_TEMP/qemu.log"
           grep -q '^E2E_PREEMPTION_A$' "$RUNNER_TEMP/qemu.log"
           grep -q '^E2E_PREEMPTION_B$' "$RUNNER_TEMP/qemu.log"
           grep -q '^E2E_PREEMPTION_A_AGAIN$' "$RUNNER_TEMP/qemu.log"
+          grep -q '^E2E_PREEMPTION_PASS$' "$RUNNER_TEMP/qemu.log"
 
-          echo "E2E_PREEMPTION_PASS"
           echo "x86_64 Timer Preemption E2E: PASS"
