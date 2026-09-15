@@ -72,9 +72,11 @@ impl TpmBufferAccess {
 
     fn virtual_range(&self, address: u64, len: usize) -> Result<*mut u8, TpmBufferError> {
         if !self.allowed(address, len) { return Err(TpmBufferError::RangeNotAllowed); }
-        let virtual_address = self.physical_memory_offset
-            .checked_add(address)
-            .ok_or(TpmBufferError::AddressOverflow)?;
+        let virtual_address = VirtAddr::new(
+            self.physical_memory_offset.as_u64()
+                .checked_add(address)
+                .ok_or(TpmBufferError::AddressOverflow)?,
+        );
         Ok(virtual_address.as_mut_ptr())
     }
 
@@ -88,7 +90,7 @@ impl TpmBufferAccess {
     pub fn write(&self, address: u64, data: &[u8]) -> Result<(), TpmBufferError> {
         if data.is_empty() { return Err(TpmBufferError::LengthTooLarge); }
         let ptr = self.virtual_range(address, data.len())?;
-        unsafe { ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len()); }
+        unsafe { ptr::copy_volatile(data.as_ptr(), ptr, data.len()); }
         Ok(())
     }
 }
