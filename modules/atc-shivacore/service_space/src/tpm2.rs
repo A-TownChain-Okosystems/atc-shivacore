@@ -49,19 +49,30 @@ pub trait MmioAccess {
     fn write_bytes(&mut self, address: u64, data: &[u8]) -> Result<(), TpmTransportError>;
 }
 
-/// CRB offsets relative to the control-area base. 64-bit buffer addresses are split
-/// into adjacent low/high 32-bit MMIO registers.
+/// PC Client CRB register offsets relative to the Locality 0 base.
+///
+/// The ACPI TPM2 control-area address identifies Locality 0. CRB control registers
+/// therefore begin at 0x40; locality registers occupy 0x00..0x0f and the CRB data
+/// buffer begins at 0x80. The 64-bit response address is naturally aligned, while
+/// the command address is split into low/high 32-bit registers.
 pub mod crb {
-    pub const CTRL_REQ: u64 = 0x00;
-    pub const CTRL_STS: u64 = 0x04;
-    pub const CTRL_CANCEL: u64 = 0x08;
-    pub const CTRL_START: u64 = 0x0C;
-    pub const CMD_SIZE: u64 = 0x18;
-    pub const CMD_ADDR_LOW: u64 = 0x1C;
-    pub const CMD_ADDR_HIGH: u64 = 0x20;
-    pub const RSP_SIZE: u64 = 0x24;
-    pub const RSP_ADDR_LOW: u64 = 0x28;
-    pub const RSP_ADDR_HIGH: u64 = 0x2C;
+    pub const LOC_STATE: u64 = 0x00;
+    pub const LOC_CTRL: u64 = 0x08;
+    pub const LOC_STS: u64 = 0x0C;
+    pub const CTRL_REQ: u64 = 0x40;
+    pub const CTRL_STS: u64 = 0x44;
+    pub const CTRL_CANCEL: u64 = 0x48;
+    pub const CTRL_START: u64 = 0x4C;
+    pub const INT_ENABLE: u64 = 0x50;
+    pub const INT_STATUS: u64 = 0x54;
+    pub const CMD_SIZE: u64 = 0x58;
+    pub const CMD_ADDR_LOW: u64 = 0x5C;
+    pub const CMD_ADDR_HIGH: u64 = 0x60;
+    pub const RSP_SIZE: u64 = 0x64;
+    pub const RSP_ADDR_LOW: u64 = 0x68;
+    pub const RSP_ADDR_HIGH: u64 = 0x6C;
+    pub const DATA_BUFFER: u64 = 0x80;
+    pub const LOCALITY_STRIDE: u64 = 0x1000;
 }
 
 pub const MAX_TPM_TRANSFER: usize = 4096;
