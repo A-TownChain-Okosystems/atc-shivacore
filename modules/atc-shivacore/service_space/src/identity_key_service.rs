@@ -1,12 +1,14 @@
 //! Capability-gated identity key service boundary for GlobusOS.
 //!
-//! The service accepts an opaque capability context instead of a caller-supplied
-//! boolean. The concrete kernel capability table remains outside this service-space
-//! API, allowing the kernel to perform the authoritative ownership/rights check.
+//! The service accepts an opaque capability context. The authoritative capability
+//! decision is made by ShivaCore's kernel capability table before a hardware-backed
+//! identity-key operation is permitted.
 
 #![allow(dead_code)]
 
 extern crate alloc;
+
+use shivacore::capability::{CapabilityTable, ResourceType, Rights};
 
 /// Opaque identifier for a key held by the secure key service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -16,8 +18,7 @@ pub struct KeyHandle(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CallerId(pub u64);
 
-/// Opaque capability reference. It is not forgeable by the service itself; the
-/// kernel IPC layer must validate ownership and rights before authorizing it.
+/// Opaque capability reference supplied by the kernel IPC boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CapabilityRef(pub u64);
 
@@ -40,6 +41,40 @@ pub trait CapabilityAuthorizer {
     fn authorize(&self, context: CapabilityContext, handle: KeyHandle) -> bool;
 }
 
+/// Adapter from the service-space authorization boundary to ShivaCore's real
+/// capability table. Identity-key handles are represented as kernel resources,
+/// never as caller-forged authorization booleans.
+pub struct KernelCapabilityAuthorizer<'a> {
+    table: &'a CapabilityTable,
+}
+
+impl<'a> KernelCapabilityAuthorizer<'a> {
+    pub const fn new(table: &'a CapabilityTable) -> Self {
+        Self { table }
+    }
+}
+
+impl CapabilityAuthorizer for KernelCapabilityAuthorizer<'_> {
+    fn authorize(&self, context: CapabilityContext, handle: KeyHandle) -> bool {
+        if !matches!(context.operation, KeyOperation::LoadEncryptionKey) {
+            return false;
+        }
+        if context.capability.0 != handle.0 {
+            return false;
+        }
+        if context.caller.0 > u32::MAX as u64 {
+            return false;
+        }
+        self.table.check_any(
+            shivacore::capability::Pid(context.caller.0 as u32),
+            context.capability.0,
+            Rights::READ,
+        ) && self.table
+            .get(shivacore::capability::CapId(context.capability.0))
+            .is_some_and(|cap| cap.resource_type == ResourceType::IdentityKey && cap.resource_id == handle.0)
+    }
+}
+
 /// Errors returned without exposing key material.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IdentityKeyError {
@@ -49,10 +84,9 @@ pub enum IdentityKeyError {
     HardwareFailure,
 }
 
-/// Backend boundary. Implementations must keep the persistent key in the secure
-/// hardware boundary. This transitional API returns key bytes only to protected
-/// service memory; the next backend generation should expose crypto operations
-/// directly so raw key material never leaves the hardware boundary.
+/// Transitional backend boundary. Production hardware implementations must bind the
+/// handle to a TPM, TEE, or secure-element object. The raw-key return remains only for
+/// the current migration path; the next API removes key export entirely.
 pub trait IdentityKeyBackend {
     fn load_key(&self, handle: KeyHandle) -> Result<[u8; 32], IdentityKeyError>;
 }
@@ -96,57 +130,58 @@ mod tests {
         }
     }
 
-    struct TestAuthorizer;
-    impl CapabilityAuthorizer for TestAuthorizer {
-        fn authorize(&self, context: CapabilityContext, handle: KeyHandle) -> bool {
-            context.caller.0 == 7
-                && context.capability.0 == handle.0
-                && matches!(context.operation, KeyOperation::LoadEncryptionKey)
-        }
-    }
-
-    fn context(caller: u64, capability: u64, handle: u64) -> CapabilityContext {
+    fn context(caller: u64, capability: u64) -> CapabilityContext {
         CapabilityContext {
             caller: CallerId(caller),
             capability: CapabilityRef(capability),
             operation: KeyOperation::LoadEncryptionKey,
         }
-        .with_handle_for_test(handle)
     }
 
-    trait ContextTestExt {
-        fn with_handle_for_test(self, _handle: u64) -> Self;
-    }
-    impl ContextTestExt for CapabilityContext {
-        fn with_handle_for_test(self, _handle: u64) -> Self { self }
+    fn provisioned_service() -> (IdentityKeyService<TestBackend, KernelCapabilityAuthorizer<'static>>, CapabilityRef) {
+        let table = Box::leak(Box::new(CapabilityTable::new()));
+        let cap = table.create(
+            shivacore::capability::Pid(7),
+            ResourceType::IdentityKey,
+            42,
+            Rights::READ,
+        );
+        (IdentityKeyService::new(TestBackend, KernelCapabilityAuthorizer::new(table)), CapabilityRef(cap.0))
     }
 
     #[test]
-    fn authorization_is_bound_to_caller_and_capability() {
-        let service = IdentityKeyService::new(TestBackend, TestAuthorizer);
-        let ctx = context(7, 1, 1);
-        assert_eq!(service.load_key(KeyHandle(1), ctx).unwrap(), [0xA5; 32]);
+    fn kernel_capability_authorizes_matching_identity_key() {
+        let (service, capability) = provisioned_service();
         assert_eq!(
-            service.load_key(KeyHandle(1), context(8, 1, 1)),
+            service.load_key(KeyHandle(42), context(7, capability.0)),
+            Ok([0xA5; 32])
+        );
+    }
+
+    #[test]
+    fn wrong_caller_is_rejected() {
+        let (service, capability) = provisioned_service();
+        assert_eq!(
+            service.load_key(KeyHandle(42), context(8, capability.0)),
             Err(IdentityKeyError::NotAuthorized)
         );
     }
 
     #[test]
-    fn invalid_capability_is_rejected() {
-        let service = IdentityKeyService::new(TestBackend, TestAuthorizer);
+    fn wrong_resource_is_rejected() {
+        let (service, capability) = provisioned_service();
         assert_eq!(
-            service.load_key(KeyHandle(1), context(7, 99, 1)),
+            service.load_key(KeyHandle(41), context(7, capability.0)),
             Err(IdentityKeyError::NotAuthorized)
         );
     }
 
     #[test]
-    fn invalid_handle_is_rejected_after_authorization() {
-        let service = IdentityKeyService::new(TestBackend, TestAuthorizer);
+    fn forged_capability_id_is_rejected() {
+        let (service, _) = provisioned_service();
         assert_eq!(
-            service.load_key(KeyHandle(0), context(7, 0, 0)),
-            Err(IdentityKeyError::InvalidHandle)
+            service.load_key(KeyHandle(42), context(7, 999_999)),
+            Err(IdentityKeyError::NotAuthorized)
         );
     }
 }
