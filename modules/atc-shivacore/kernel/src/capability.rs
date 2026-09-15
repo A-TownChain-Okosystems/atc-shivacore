@@ -5,20 +5,13 @@
 //! Jede Ressource (Speicher, IPC-Kanal, Beschleuniger) ist nur ueber eine
 //! Capability zugaenglich. Capabilities koennen delegiert werden, aber nur
 //! mit Einschraenkung (Attenuation) — niemals mit Erweiterung.
-//!
-//! Eigenschaften (durch Rusts Ownership/Typsystem erzwungen):
-//! - Rechte-Monotonie: delegierte Cap kann nie mehr Rechte haben als das Original
-//! - Keine Forge: Capabilities werden vom Kernel erzeugt, nicht von Prozessen
-//! - Widerrufbar: free() entzieht alle abgeleiteten Capabilities
-//! - Atomic: Erzeugung/Delegation/Widerruf sind atomare Operationen (Spinlock)
 
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use core::ops::{BitOr, BitAnd};
+use core::ops::{BitAnd, BitOr};
 
-/// Ressourcen-Typen im Kernel
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResourceType {
     Memory,
@@ -26,19 +19,20 @@ pub enum ResourceType {
     Accelerator,
     FileSystem,
     Network,
+    /// Hardware-backed identity-key slot (TPM/TEE/secure element).
+    IdentityKey,
 }
 
-/// Zugriffsrechte als Bitfield
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rights(pub u8);
 
 impl Rights {
-    pub const NONE:  Rights = Rights(0);
-    pub const READ:  Rights = Rights(1);
+    pub const NONE: Rights = Rights(0);
+    pub const READ: Rights = Rights(1);
     pub const WRITE: Rights = Rights(2);
-    pub const EXEC:  Rights = Rights(4);
+    pub const EXEC: Rights = Rights(4);
     pub const DELEGATE: Rights = Rights(8);
-    pub const ALL:   Rights = Rights(1 | 2 | 4 | 8);
+    pub const ALL: Rights = Rights(1 | 2 | 4 | 8);
 
     pub fn has(self, other: Rights) -> bool { (self.0 & other.0) == other.0 }
     pub fn from_bits_truncate(bits: u8) -> Rights { Rights(bits & 0x0F) }
@@ -50,20 +44,16 @@ impl BitOr for Rights {
     type Output = Rights;
     fn bitor(self, rhs: Rights) -> Rights { Rights(self.0 | rhs.0) }
 }
-
 impl BitAnd for Rights {
     type Output = Rights;
     fn bitand(self, rhs: Rights) -> Rights { Rights(self.0 & rhs.0) }
 }
 
-/// Eindeutige Capability-ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CapId(pub u64);
 
-/// Pid wird aus ats1000 re-exportiert (einheitlicher Typ)
 pub use crate::ats1000::Pid;
 
-/// Eine Capability — das Herzstueck des Sicherheitsmodells
 #[derive(Debug, Clone)]
 pub struct Capability {
     pub id: CapId,
@@ -71,11 +61,9 @@ pub struct Capability {
     pub resource_id: u64,
     pub rights: Rights,
     pub owner: Pid,
-    /// Eltern-Capability, falls delegiert. None = vom Kernel direkt erzeugt.
     pub parent: Option<CapId>,
 }
 
-/// Fehler bei Capability-Operationen
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CapabilityError {
     NotFound,
@@ -84,7 +72,6 @@ pub enum CapabilityError {
     RightsExceeded,
 }
 
-/// Capability-Tabelle — Kernel-intern, geschuetzt durch Spinlock
 #[derive(Clone)]
 pub struct CapabilityTable {
     caps: BTreeMap<CapId, Capability>,
@@ -97,7 +84,6 @@ impl CapabilityTable {
         Self { caps: BTreeMap::new(), by_pid: BTreeMap::new(), next_id: 1 }
     }
 
-    /// Erzeugt eine neue Capability fuer einen Prozess.
     pub fn create(&mut self, pid: Pid, resource_type: ResourceType, resource_id: u64, rights: Rights) -> CapId {
         let id = CapId(self.next_id);
         self.next_id += 1;
@@ -107,8 +93,6 @@ impl CapabilityTable {
         id
     }
 
-    /// Delegiert eine Capability an einen anderen Prozess.
-    /// Rechte koennen nur EINGESCHRAENKT werden (Attenuation).
     pub fn delegate(&mut self, source_pid: Pid, source_cap: CapId, target_pid: Pid, attenuated_rights: Rights) -> Result<CapId, CapabilityError> {
         let parent_cap = self.caps.get(&source_cap).ok_or(CapabilityError::NotFound)?.clone();
         if parent_cap.owner != source_pid { return Err(CapabilityError::NotOwner); }
@@ -122,7 +106,6 @@ impl CapabilityTable {
         Ok(id)
     }
 
-    /// Prueft, ob ein Prozess eine bestimmte Capability mit den geforderten Rechten besitzt.
     pub fn check(&self, pid: Pid, resource_type: ResourceType, resource_id: u64, required: Rights) -> bool {
         self.by_pid.get(&pid).map(|caps| caps.iter().any(|&cap_id| {
             if let Some(cap) = self.caps.get(&cap_id) {
@@ -131,14 +114,12 @@ impl CapabilityTable {
         })).unwrap_or(false)
     }
 
-    /// Check capability by cap_id only (any resource type).
     pub fn check_any(&self, pid: Pid, cap_id: u64, required: Rights) -> bool {
         self.caps.get(&CapId(cap_id)).map(|cap| cap.owner == pid && cap.rights.has(required)).unwrap_or(false)
     }
 
     pub fn get(&self, id: CapId) -> Option<&Capability> { self.caps.get(&id) }
 
-    /// Widerruft eine Capability und alle davon abgeleiteten (rekursiv).
     pub fn revoke(&mut self, cap_id: CapId) {
         let mut to_remove = Vec::new();
         self.collect_descendants(cap_id, &mut to_remove);
@@ -174,6 +155,16 @@ mod tests {
         assert!(table.check(pid(1), ResourceType::Memory, 0x1000, Rights::WRITE));
         assert!(!table.check(pid(1), ResourceType::Memory, 0x1000, Rights::EXEC));
         assert!(!table.check(pid(2), ResourceType::Memory, 0x1000, Rights::READ));
+    }
+
+    #[test]
+    fn test_identity_key_capability() {
+        let mut table = CapabilityTable::new();
+        let cap = table.create(pid(7), ResourceType::IdentityKey, 42, Rights::READ);
+        assert!(table.check(pid(7), ResourceType::IdentityKey, 42, Rights::READ));
+        assert!(table.check_any(pid(7), cap.0, Rights::READ));
+        assert!(!table.check(pid(8), ResourceType::IdentityKey, 42, Rights::READ));
+        assert!(!table.check(pid(7), ResourceType::IdentityKey, 42, Rights::WRITE));
     }
 
     #[test]
