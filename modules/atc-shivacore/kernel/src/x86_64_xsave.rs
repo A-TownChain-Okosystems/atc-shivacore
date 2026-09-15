@@ -10,7 +10,6 @@ use core::arch::{asm, global_asm};
 use core::ptr::NonNull;
 
 const CPUID_XSAVE: u32 = 1 << 26;
-const CPUID_OSXSAVE: u32 = 1 << 27;
 const CR4_OSFXSR: u64 = 1 << 9;
 const CR4_OSXSAVE: u64 = 1 << 18;
 const XCR0_X87: u64 = 1 << 0;
@@ -38,10 +37,11 @@ impl XsaveConfig {
             return Err(XsaveError::Unsupported);
         }
 
-        // XSAVE/XGETBV are usable only after the OS advertises XSAVE support
-        // through CR4.OSXSAVE. OSFXSR is required for the SSE architectural state.
+        // CPUID.OSXSAVE reflects CR4.OSXSAVE, so enable the OS contract before
+        // querying it again. OSFXSR is required for the architectural SSE state.
         unsafe { enable_xsave_os_support(); }
-        if leaf1.ecx & CPUID_OSXSAVE == 0 {
+        let enabled = unsafe { core::arch::x86_64::__cpuid(1) };
+        if enabled.ecx & (1 << 27) == 0 {
             return Err(XsaveError::Unsupported);
         }
 
