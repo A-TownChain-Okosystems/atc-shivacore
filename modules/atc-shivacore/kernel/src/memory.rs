@@ -7,13 +7,11 @@
 //! ordinary RAM allocation.
 
 #[cfg(feature = "x86-boot")]
-use bootloader_api::info::{MemoryRegion, MemoryRegionKind, MemoryRegions};
+use bootloader_api::info::{MemoryRegionKind, MemoryRegions};
 
 #[cfg(feature = "x86-boot")]
 use x86_64::{
-    structures::paging::{
-        FrameAllocator, Mapper, OffsetPageTable, PageTable, PhysFrame, Size4KiB,
-    },
+    structures::paging::{FrameAllocator, OffsetPageTable, PageTable, PhysFrame, Size4KiB},
     PhysAddr, VirtAddr,
 };
 
@@ -46,27 +44,7 @@ pub struct BootInfoFrameAllocator {
 #[cfg(feature = "x86-boot")]
 impl BootInfoFrameAllocator {
     pub unsafe fn init(memory_regions: &'static MemoryRegions) -> Self {
-        Self {
-            regions: memory_regions,
-            next_region: 0,
-            next_frame: 0,
-        }
-    }
-
-    fn current_region(&self) -> Option<&MemoryRegion> {
-        self.regions.get(self.next_region)
-    }
-
-    fn advance_to_usable_region(&mut self) -> Option<&MemoryRegion> {
-        while self.next_region < self.regions.len() {
-            let region = &self.regions[self.next_region];
-            if region.kind == MemoryRegionKind::Usable {
-                return Some(region);
-            }
-            self.next_region += 1;
-            self.next_frame = 0;
-        }
-        None
+        Self { regions: memory_regions, next_region: 0, next_frame: 0 }
     }
 }
 
@@ -74,19 +52,29 @@ impl BootInfoFrameAllocator {
 unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
     fn allocate_frame(&mut self) -> Option<PhysFrame> {
         loop {
-            let region = self.advance_to_usable_region()?;
-            let start = region.start;
-            let end = region.end;
-            let frame_address = start.checked_add((self.next_frame as u64) * 4096)?;
+            if self.next_region >= self.regions.len() {
+                return None;
+            }
 
-            if frame_address >= end {
+            let region = &self.regions[self.next_region];
+            if region.kind != MemoryRegionKind::Usable {
+                self.next_region += 1;
+                self.next_frame = 0;
+                continue;
+            }
+
+            let frame_address = region
+                .start
+                .checked_add((self.next_frame as u64).checked_mul(4096)?)?;
+
+            if frame_address >= region.end {
                 self.next_region += 1;
                 self.next_frame = 0;
                 continue;
             }
 
             self.next_frame += 1;
-            return PhysFrame::containing_address(PhysAddr::new(frame_address)).into();
+            return Some(PhysFrame::containing_address(PhysAddr::new(frame_address)));
         }
     }
 }
