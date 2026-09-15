@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
-// ShivaCore — Global Descriptor Table + Task State Segment.
+// ShivaCore — Interrupt Descriptor Table + PIC-Remapping.
 
 use crate::gdt;
 use crate::serial_println;
@@ -11,27 +11,27 @@ use shivacore::timer_scheduler_bridge::TimerSchedulerBridge;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 use x86_64::VirtAddr;
-use core::sync::atomic::{AtomicU8, Ordering};
 
 pub const PIC_1_OFFSET: u8 = 0x20;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 pub static PICS: Mutex<ChainedPics> = Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
 
-#[derive(Debug, Clone, Copy)]
-#[repr(u8)]
-pub enum InterruptIndex { Timer = PIC_1_OFFSET, Keyboard }
-impl InterruptIndex { fn as_u8(self) -> u8 { self as u8 } fn as_usize(self) -> usize { usize::from(self.as_u8()) } }
-
 static TIMER_BRIDGE: Mutex<Option<&'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>>> = Mutex::new(None);
-static E2E_SWITCH_COUNT: AtomicU8 = AtomicU8::new(0);
 
-pub fn install_timer_scheduler_bridge(bridge: &'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>) { *TIMER_BRIDGE.lock() = Some(bridge); }
+pub fn install_timer_scheduler_bridge(bridge: &'static mut TimerSchedulerBridge<'static, crate::TssKernelStackActivator>) {
+    *TIMER_BRIDGE.lock() = Some(bridge);
+}
 
 pub unsafe fn activate_initial_context(context: &'static shivacore::process_context::ProcessExecutionContext) -> ! {
     let mut guard = TIMER_BRIDGE.lock();
     let bridge = guard.as_deref_mut().expect("E2E: timer scheduler bridge not installed");
     bridge.activate_initial(context)
 }
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum InterruptIndex { Timer = PIC_1_OFFSET, Keyboard }
+impl InterruptIndex { fn as_u8(self) -> u8 { self as u8 } }
 
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
@@ -42,7 +42,7 @@ lazy_static! {
             idt.double_fault.set_handler_fn(double_fault_handler).set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
             idt[InterruptIndex::Timer.as_u8()].set_handler_addr(VirtAddr::new(entry_address()));
         }
-        idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
+        idt[InterruptIndex::Keyboard as u8].set_handler_fn(keyboard_interrupt_handler);
         idt
     };
 }
@@ -73,19 +73,7 @@ pub extern "C" fn shivacore_timer_interrupt_dispatch(frame: *mut HardwareContext
                     if TIMER_PREEMPTION.preemption_point() == shivacore::preemption::PreemptionAction::Reschedule {
                         if let Some(bridge) = TIMER_BRIDGE.lock().as_deref_mut() {
                             match unsafe { bridge.dispatch(context as *mut _ as *mut shivacore::x86_64_context_switch::ContextStack) } {
-                                Ok(target) => {
-                                    match bridge.scheduler().current() {
-                                        Some(shivacore::ats1000::Pid(2)) => serial_println!("E2E_PREEMPTION_B"),
-                                        Some(shivacore::ats1000::Pid(1)) => {
-                                            if E2E_SWITCH_COUNT.fetch_add(1, Ordering::AcqRel) == 0 {
-                                                serial_println!("E2E_PREEMPTION_A_AGAIN");
-                                                serial_println!("E2E_PREEMPTION_PASS");
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                    target
-                                }
+                                Ok(target) => target,
                                 Err(_) => no_switch(),
                             }
                         } else { no_switch() }
