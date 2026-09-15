@@ -11,6 +11,8 @@ use core::ptr::NonNull;
 
 const CPUID_XSAVE: u32 = 1 << 26;
 const CPUID_OSXSAVE: u32 = 1 << 27;
+const CR4_OSFXSR: u64 = 1 << 9;
+const CR4_OSXSAVE: u64 = 1 << 18;
 const XCR0_X87: u64 = 1 << 0;
 const XCR0_SSE: u64 = 1 << 1;
 const MAX_XSAVE_BYTES: usize = 64 * 1024;
@@ -32,13 +34,21 @@ pub struct XsaveConfig {
 impl XsaveConfig {
     pub fn detect() -> Result<Self, XsaveError> {
         let leaf1 = unsafe { core::arch::x86_64::__cpuid(1) };
-        if leaf1.ecx & CPUID_XSAVE == 0 || leaf1.ecx & CPUID_OSXSAVE == 0 {
+        if leaf1.ecx & CPUID_XSAVE == 0 {
             return Err(XsaveError::Unsupported);
         }
 
-        let xcr0 = read_xcr0();
+        // XSAVE/XGETBV are usable only after the OS advertises XSAVE support
+        // through CR4.OSXSAVE. OSFXSR is required for the SSE architectural state.
+        unsafe { enable_xsave_os_support(); }
+        if leaf1.ecx & CPUID_OSXSAVE == 0 {
+            return Err(XsaveError::Unsupported);
+        }
+
+        let mut xcr0 = read_xcr0();
         if xcr0 & (XCR0_X87 | XCR0_SSE) != (XCR0_X87 | XCR0_SSE) {
-            return Err(XsaveError::InvalidMask);
+            xcr0 |= XCR0_X87 | XCR0_SSE;
+            unsafe { write_xcr0(xcr0); }
         }
 
         let leaf0d = unsafe { core::arch::x86_64::__cpuid_count(0xD, 0) };
@@ -86,7 +96,15 @@ impl Drop for XsaveState {
     }
 }
 
+unsafe fn enable_xsave_os_support() {
+    let mut cr4: u64;
+    asm!("mov {}, cr4", out(reg) cr4, options(nostack, preserves_flags));
+    cr4 |= CR4_OSFXSR | CR4_OSXSAVE;
+    asm!("mov cr4, {}", in(reg) cr4, options(nostack, preserves_flags));
+}
+
 global_asm!(r#"
+    .intel_syntax noprefix
     .global shivacore_xsave
     .type shivacore_xsave,@function
 shivacore_xsave:
@@ -104,6 +122,7 @@ shivacore_xrstor:
     shr rdx, 32
     xrstor64 [rdi]
     ret
+    .att_syntax prefix
 "#);
 
 extern "C" {
@@ -121,6 +140,13 @@ fn read_xcr0() -> u64 {
     ((high as u64) << 32) | low as u64
 }
 
+#[inline]
+unsafe fn write_xcr0(value: u64) {
+    let low = value as u32;
+    let high = (value >> 32) as u32;
+    asm!("xsetbv", in("ecx") 0u32, in("eax") low, in("edx") high, options(nostack));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,6 +154,12 @@ mod tests {
     #[test]
     fn required_xcr0_bits_are_defined() {
         assert_eq!(XCR0_X87 | XCR0_SSE, 0x3);
+    }
+
+    #[test]
+    fn required_cr4_bits_are_defined() {
+        assert_eq!(CR4_OSFXSR, 1 << 9);
+        assert_eq!(CR4_OSXSAVE, 1 << 18);
     }
 
     #[test]
