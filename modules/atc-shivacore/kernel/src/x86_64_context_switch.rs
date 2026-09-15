@@ -1,23 +1,14 @@
 // Copyright (c) 2026 Michael Wroblewski / ShivaCore / A-TownChain-Okosystems. All Rights Reserved.
 //! x86_64 interrupt-return context switch boundary.
 //!
-//! This module defines the exact stack contract for a future scheduler-driven
-//! context switch. The trampoline is deliberately small: it restores the
-//! general-purpose registers from a kernel-owned context stack and finishes
-//! with `iretq`, so the CPU returns through the architectural interrupt frame.
-//!
-//! The scheduler must construct and validate a complete ContextStack before
-//! invoking the trampoline. No page-table or scheduler metadata is mutated by
-//! the assembly itself.
+//! This module defines the exact stack contract for a scheduler-driven
+//! context switch. The trampoline restores the general-purpose registers from
+//! a kernel-owned context stack and finishes with `iretq`.
 
 #![cfg(feature = "x86-boot")]
 
 use core::arch::{asm, global_asm};
 
-/// Saved register set immediately below an interrupt-return frame.
-///
-/// Stack order is part of the ABI and must remain synchronized with
-/// `context_switch_trampoline`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SavedRegisters {
@@ -38,7 +29,6 @@ pub struct SavedRegisters {
     pub rax: u64,
 }
 
-/// Architectural interrupt-return frame used by `iretq`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IretFrame {
@@ -49,7 +39,6 @@ pub struct IretFrame {
     pub ss: u64,
 }
 
-/// Complete target stack contract.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ContextStack {
@@ -63,8 +52,18 @@ pub enum ContextSwitchError {
     UnalignedStack,
     InvalidRip,
     InvalidRsp,
+    NonCanonicalAddress,
     InvalidFlags,
     InvalidSegment,
+}
+
+/// x86_64 canonical-address check for the currently supported 48-bit VA mode.
+/// Bits 63:48 must replicate bit 47.
+#[inline]
+pub const fn is_canonical_address(address: u64) -> bool {
+    let upper = address >> 48;
+    let sign = (address >> 47) & 1;
+    (sign == 0 && upper == 0) || (sign == 1 && upper == 0xffff)
 }
 
 impl ContextStack {
@@ -76,8 +75,10 @@ impl ContextStack {
         if self.iret.rsp == 0 {
             return Err(ContextSwitchError::InvalidRsp);
         }
-        // RFLAGS bit 1 is architecturally fixed to one. Rejecting a malformed
-        // frame here prevents an invalid return state from reaching iretq.
+        if !is_canonical_address(self.iret.rip) || !is_canonical_address(self.iret.rsp) {
+            return Err(ContextSwitchError::NonCanonicalAddress);
+        }
+        // RFLAGS bit 1 is architecturally fixed to one.
         if self.iret.rflags & 0x2 == 0 {
             return Err(ContextSwitchError::InvalidFlags);
         }
@@ -108,8 +109,6 @@ pub unsafe fn switch_to_context(stack: *const ContextStack) -> ! {
     context_switch_trampoline(stack as u64)
 }
 
-/// Assembly entry point. The target pointer is passed in RDI using the SysV
-/// calling convention; the trampoline never returns to Rust.
 global_asm!(r#"
     .global context_switch_trampoline
     .type context_switch_trampoline,@function
@@ -139,7 +138,6 @@ extern "C" {
     fn context_switch_trampoline(stack: u64) -> !;
 }
 
-/// Prevent accidental compiler assumptions about a normal Rust return path.
 #[inline(never)]
 pub unsafe fn architecture_barrier() {
     asm!("", options(nomem, nostack, preserves_flags));
@@ -152,27 +150,15 @@ mod tests {
     fn context() -> ContextStack {
         ContextStack {
             registers: SavedRegisters {
-                r15: 15,
-                r14: 14,
-                r13: 13,
-                r12: 12,
-                r11: 11,
-                r10: 10,
-                r9: 9,
-                r8: 8,
-                rsi: 6,
-                rdi: 7,
-                rbp: 5,
-                rdx: 2,
-                rcx: 1,
-                rbx: 3,
-                rax: 0,
+                r15: 15, r14: 14, r13: 13, r12: 12, r11: 11,
+                r10: 10, r9: 9, r8: 8, rsi: 6, rdi: 7, rbp: 5,
+                rdx: 2, rcx: 1, rbx: 3, rax: 0,
             },
             iret: IretFrame {
-                rip: 0x4000,
+                rip: 0x0000_0000_0000_4000,
                 cs: 0x1b,
                 rflags: 0x202,
-                rsp: 0x8000,
+                rsp: 0x0000_0000_0000_8000,
                 ss: 0x23,
             },
         }
@@ -195,6 +181,27 @@ mod tests {
         let mut context = context();
         context.iret.rsp = 0;
         assert_eq!(context.validate(), Err(ContextSwitchError::InvalidRsp));
+    }
+
+    #[test]
+    fn noncanonical_rip_is_rejected() {
+        let mut context = context();
+        context.iret.rip = 0x0001_0000_0000_0000;
+        assert_eq!(context.validate(), Err(ContextSwitchError::NonCanonicalAddress));
+    }
+
+    #[test]
+    fn noncanonical_rsp_is_rejected() {
+        let mut context = context();
+        context.iret.rsp = 0x0001_0000_0000_0000;
+        assert_eq!(context.validate(), Err(ContextSwitchError::NonCanonicalAddress));
+    }
+
+    #[test]
+    fn canonical_high_half_address_is_accepted() {
+        assert!(is_canonical_address(0xffff_8000_0000_0000));
+        assert!(is_canonical_address(0xffff_ffff_ffff_ffff));
+        assert!(!is_canonical_address(0x0001_0000_0000_0000));
     }
 
     #[test]
