@@ -102,6 +102,11 @@ unsafe fn map_user_image(
         let rel_second = (second_pos as isize - (jne_pos + 2) as isize) as i8;
         code_bytes[jne_pos + 1] = rel_second as u8;
         emit_marker(&mut code_bytes, &mut cursor, second_marker.unwrap());
+        emit_marker(&mut code_bytes, &mut cursor, b"E2E_PREEMPTION_PASS\n");
+        let done_pos = cursor;
+        code_bytes[cursor..cursor + 2].copy_from_slice(&[0xeb, 0]); cursor += 2;
+        let rel_done = (done_pos as isize - (done_pos + 2) as isize) as i8;
+        code_bytes[done_pos + 1] = rel_done as u8;
         let rel_start = (start as isize - (back_pos + 2) as isize) as i8;
         code_bytes[back_pos + 1] = rel_start as u8;
     } else {
