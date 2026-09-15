@@ -1,7 +1,9 @@
 //! TPM 2.0 CRB transaction state machine.
 //!
 //! Bounded command/response transfers using the CRB control area discovered from ACPI.
-//! Physical MMIO mapping remains owned by the platform HAL.
+//! Physical MMIO mapping remains owned by the platform HAL. Each transaction acquires
+//! Locality 0 and releases it again; failed transactions therefore cannot leave the
+//! locality permanently owned by the service.
 
 #![allow(dead_code)]
 
@@ -11,21 +13,86 @@ use super::tpm2_command::{parse_response_header, validate_command, TpmCommandErr
 const REQ_CMD_READY: u32 = 1 << 0;
 const REQ_GO_IDLE: u32 = 1 << 1;
 const CANCEL: u32 = 1;
+const START: u32 = 1;
 const STS_TPM_IDLE: u32 = 1 << 1;
+const LOC_REQUEST_ACCESS: u32 = 1 << 0;
+const LOC_RELINQUISH: u32 = 1 << 1;
+const LOC_ASSIGNED: u32 = 1 << 1;
+const LOC_VALID: u32 = 1 << 7;
+const LOC_ACTIVE_MASK: u32 = 0x1C;
+const LOC_ACTIVE_SHIFT: u32 = 2;
+const LOC_GRANTED: u32 = 1 << 0;
 pub const DEFAULT_POLL_LIMIT: usize = 100_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CrbTransactionError { Transport(TpmTransportError), Command(TpmCommandError), ResponseTooLarge, InvalidBufferAddress, PollTimeout }
+pub enum CrbTransactionError {
+    Transport(TpmTransportError),
+    Command(TpmCommandError),
+    ResponseTooLarge,
+    InvalidBufferAddress,
+    LocalityUnavailable,
+    WrongLocality,
+    PollTimeout,
+}
 impl From<TpmTransportError> for CrbTransactionError { fn from(v: TpmTransportError) -> Self { Self::Transport(v) } }
 impl From<TpmCommandError> for CrbTransactionError { fn from(v: TpmCommandError) -> Self { Self::Command(v) } }
 
 impl<M: MmioAccess> TpmCrbTransport<M> {
-    /// Execute one TPM command through CRB with bounded polling and cancellation on timeout.
+    /// Execute one TPM command through CRB with bounded polling, Locality-0 ownership,
+    /// cancellation on command timeout, and best-effort locality release.
     pub fn execute(&mut self, command: &[u8], response: &mut [u8], poll_limit: usize) -> Result<usize, CrbTransactionError> {
         validate_command(command, MAX_TPM_TRANSFER)?;
         if response.len() < 10 || response.len() > MAX_TPM_TRANSFER { return Err(CrbTransactionError::ResponseTooLarge); }
         if poll_limit == 0 { return Err(CrbTransactionError::PollTimeout); }
 
+        self.acquire_locality(poll_limit)?;
+        let result = self.execute_owned(command, response, poll_limit);
+        let release = self.release_locality(poll_limit);
+        match (result, release) {
+            (Err(error), _) => Err(error),
+            (Ok(size), Ok(())) => Ok(size),
+            (Ok(_), Err(error)) => Err(error),
+        }
+    }
+
+    fn acquire_locality(&mut self, poll_limit: usize) -> Result<(), CrbTransactionError> {
+        let state = self.register_address(crb::LOC_STATE)?;
+        let control = self.register_address(crb::LOC_CTRL)?;
+        let status = self.register_address(crb::LOC_STS)?;
+
+        let initial = self.mmio.read_u32(state)?;
+        if initial & LOC_VALID == 0 { return Err(CrbTransactionError::LocalityUnavailable); }
+        if initial & LOC_ASSIGNED != 0 {
+            let active = (initial & LOC_ACTIVE_MASK) >> LOC_ACTIVE_SHIFT;
+            if active != 0 { return Err(CrbTransactionError::WrongLocality); }
+            if self.mmio.read_u32(status)? & LOC_GRANTED != 0 { return Ok(()); }
+        }
+
+        self.mmio.write_u32(control, LOC_REQUEST_ACCESS)?;
+        for _ in 0..poll_limit {
+            let value = self.mmio.read_u32(state)?;
+            if value & LOC_VALID == 0 { continue; }
+            if value & LOC_ASSIGNED != 0 {
+                let active = (value & LOC_ACTIVE_MASK) >> LOC_ACTIVE_SHIFT;
+                if active != 0 { return Err(CrbTransactionError::WrongLocality); }
+                if self.mmio.read_u32(status)? & LOC_GRANTED != 0 { return Ok(()); }
+            }
+        }
+        Err(CrbTransactionError::PollTimeout)
+    }
+
+    fn release_locality(&mut self, poll_limit: usize) -> Result<(), CrbTransactionError> {
+        let state = self.register_address(crb::LOC_STATE)?;
+        let control = self.register_address(crb::LOC_CTRL)?;
+        self.mmio.write_u32(control, LOC_RELINQUISH)?;
+        for _ in 0..poll_limit {
+            let value = self.mmio.read_u32(state)?;
+            if value & LOC_VALID != 0 && value & LOC_ASSIGNED == 0 { return Ok(()); }
+        }
+        Err(CrbTransactionError::PollTimeout)
+    }
+
+    fn execute_owned(&mut self, command: &[u8], response: &mut [u8], poll_limit: usize) -> Result<usize, CrbTransactionError> {
         let request = self.register_address(crb::CTRL_REQ)?;
         let status = self.register_address(crb::CTRL_STS)?;
         let cancel = self.register_address(crb::CTRL_CANCEL)?;
@@ -54,7 +121,7 @@ impl<M: MmioAccess> TpmCrbTransport<M> {
         }
 
         self.mmio.write_bytes(command_address, command)?;
-        self.mmio.write_u32(start, 1)?;
+        self.mmio.write_u32(start, START)?;
         if !self.poll_until(poll_limit, |mmio| Ok(mmio.read_u32(start)? == 0))? {
             let _ = self.mmio.write_u32(cancel, CANCEL);
             let _ = self.mmio.write_u32(request, REQ_GO_IDLE);
@@ -73,7 +140,7 @@ impl<M: MmioAccess> TpmCrbTransport<M> {
         }
 
         self.mmio.read_bytes(response_address, &mut response[..available])?;
-        parse_response_header(&response[..available], response.len())?;
+        parse_response_header(&response[..available], available)?;
         self.mmio.write_u32(request, REQ_GO_IDLE)?;
         if !self.poll_until(poll_limit, |mmio| Ok(mmio.read_u32(status)? & STS_TPM_IDLE != 0))? {
             return Err(CrbTransactionError::PollTimeout);
@@ -91,17 +158,31 @@ impl<M: MmioAccess> TpmCrbTransport<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    struct FakeMmio;
+    struct FakeMmio { state: u32, status: u32, writes: usize }
     impl MmioAccess for FakeMmio {
-        fn read_u32(&self, _: u64) -> Result<u32, TpmTransportError> { Ok(0) }
-        fn write_u32(&mut self, _: u64, _: u32) -> Result<(), TpmTransportError> { Ok(()) }
-        fn read_bytes(&self, _: u64, out: &mut [u8]) -> Result<(), TpmTransportError> { out.fill(0); Ok(()) }
+        fn read_u32(&self, address: u64) -> Result<u32, TpmTransportError> {
+            match address & 0xFF { 0x00 => Ok(self.state), 0x0C => Ok(self.status), 0x40 => Ok(0), 0x44 => Ok(STS_TPM_IDLE), 0x58 => Ok(64), 0x5C => Ok(0x1000), 0x60 => Ok(0), 0x64 => Ok(10), 0x68 => Ok(0x2000), 0x6C => Ok(0), 0x4C => Ok(0), _ => Ok(0) }
+        }
+        fn write_u32(&mut self, address: u64, value: u32) -> Result<(), TpmTransportError> {
+            self.writes += 1;
+            match address & 0xFF {
+                0x08 if value == LOC_REQUEST_ACCESS => { self.state = LOC_VALID | LOC_ASSIGNED; self.status = LOC_GRANTED; }
+                0x08 if value == LOC_RELINQUISH => { self.state = LOC_VALID; }
+                _ => {}
+            }
+            Ok(())
+        }
+        fn read_bytes(&self, address: u64, out: &mut [u8]) -> Result<(), TpmTransportError> {
+            assert_eq!(address, 0x2000);
+            out.fill(0); out[0..2].copy_from_slice(&0x8001u16.to_be_bytes()); out[2..6].copy_from_slice(&10u32.to_be_bytes()); out[6..10].copy_from_slice(&0u32.to_be_bytes()); Ok(())
+        }
         fn write_bytes(&mut self, _: u64, _: &[u8]) -> Result<(), TpmTransportError> { Ok(()) }
     }
+
     #[test]
     fn zero_poll_limit_fails_closed() {
         let descriptor = Tpm2Descriptor::crb(0x1000).unwrap();
-        let mut transport = TpmCrbTransport::new(descriptor, FakeMmio);
+        let mut transport = TpmCrbTransport::new(descriptor, FakeMmio { state: LOC_VALID, status: 0, writes: 0 });
         let command = [0x80, 0x01, 0, 0, 0, 10, 0, 0, 0, 0];
         let mut response = [0u8; 32];
         assert_eq!(transport.execute(&command, &mut response, 0), Err(CrbTransactionError::PollTimeout));
