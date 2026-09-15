@@ -89,9 +89,7 @@ impl<M: MmioAccess, B: BufferAccess> TpmCrbTransport<M, B> {
 
         self.mmio.write_u32(request, REQ_CMD_READY)?;
         let mut ready = false;
-        for _ in 0..poll_limit {
-            if self.mmio.read_u32(request)? & REQ_CMD_READY == 0 { ready = true; break; }
-        }
+        for _ in 0..poll_limit { if self.mmio.read_u32(request)? & REQ_CMD_READY == 0 { ready = true; break; } }
         if !ready { return Err(CrbTransactionError::PollTimeout); }
 
         let command_buffer_size = self.mmio.read_u32(cmd_size)? as usize;
@@ -105,9 +103,7 @@ impl<M: MmioAccess, B: BufferAccess> TpmCrbTransport<M, B> {
 
         self.mmio.write_u32(start, START)?;
         let mut completed = false;
-        for _ in 0..poll_limit {
-            if self.mmio.read_u32(start)? == 0 { completed = true; break; }
-        }
+        for _ in 0..poll_limit { if self.mmio.read_u32(start)? == 0 { completed = true; break; } }
         if !completed {
             let _ = self.mmio.write_u32(cancel, CANCEL);
             let _ = self.mmio.write_u32(request, REQ_GO_IDLE);
@@ -121,8 +117,6 @@ impl<M: MmioAccess, B: BufferAccess> TpmCrbTransport<M, B> {
             return Err(CrbTransactionError::ResponseTooLarge);
         }
 
-        // RSP_SIZE is buffer capacity, not necessarily the actual response size.
-        // Read only the fixed header first, then honor the TPM responseSize field.
         self.buffers.read(response_address, &mut response[..TPM_HEADER_SIZE])?;
         let declared = u32::from_be_bytes([response[2], response[3], response[4], response[5]]) as usize;
         if declared < TPM_HEADER_SIZE || declared > response_capacity || declared > response.len() {
@@ -130,13 +124,12 @@ impl<M: MmioAccess, B: BufferAccess> TpmCrbTransport<M, B> {
             return Err(CrbTransactionError::ResponseTooLarge);
         }
         if declared > TPM_HEADER_SIZE {
-            self.buffers.read(response_address + TPM_HEADER_SIZE as u64, &mut response[TPM_HEADER_SIZE..declared])?;
+            let tail_address = response_address.checked_add(TPM_HEADER_SIZE as u64).ok_or(CrbTransactionError::InvalidBufferAddress)?;
+            self.buffers.read(tail_address, &mut response[TPM_HEADER_SIZE..declared])?;
         }
         parse_response_header(&response[..declared], MAX_TPM_TRANSFER)?;
         self.mmio.write_u32(request, REQ_GO_IDLE)?;
-        for _ in 0..poll_limit {
-            if self.mmio.read_u32(status)? & STS_TPM_IDLE != 0 { return Ok(declared); }
-        }
+        for _ in 0..poll_limit { if self.mmio.read_u32(status)? & STS_TPM_IDLE != 0 { return Ok(declared); } }
         Err(CrbTransactionError::PollTimeout)
     }
 }
@@ -156,15 +149,13 @@ mod tests {
     struct FakeBuffers;
     impl BufferAccess for FakeBuffers {
         fn read(&self, address: u64, out: &mut [u8]) -> Result<(), TpmTransportError> {
-            assert!(address == 0x2000 || address == 0x2000 + 10);
-            out.fill(0);
+            assert!(address == 0x2000 || address == 0x2000 + 10); out.fill(0);
             if address == 0x2000 { out[..2].copy_from_slice(&0x8001u16.to_be_bytes()); out[2..6].copy_from_slice(&10u32.to_be_bytes()); }
             Ok(())
         }
         fn write(&mut self, address: u64, _: &[u8]) -> Result<(), TpmTransportError> { assert_eq!(address, 0x1000); Ok(()) }
     }
-    #[test]
-    fn zero_poll_limit_fails_closed() {
+    #[test] fn zero_poll_limit_fails_closed() {
         let descriptor = super::super::tpm2::Tpm2Descriptor::crb(0x1000).unwrap();
         let mut transport = TpmCrbTransport::new(descriptor, FakeMmio { state: LOC_VALID, status: 0 }, FakeBuffers);
         let command = [0x80, 0x01, 0, 0, 0, 10, 0, 0, 0, 0]; let mut response = [0u8; 32];
