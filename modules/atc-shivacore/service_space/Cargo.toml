@@ -10,6 +10,10 @@ path = "src/lib.rs"
 test = true
 bench = false
 
+[features]
+default = []
+x86-tpm = ["shivacore/x86-boot"]
+
 [dependencies]
 shivacore = { path = "../kernel" }
 spin = "0.12"
