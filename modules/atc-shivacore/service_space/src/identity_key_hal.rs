@@ -1,37 +1,55 @@
 //! Hardware-backed identity-key HAL boundary.
 //!
-//! This module deliberately contains no software key fallback and no persistent key
-//! storage. Platform implementations must resolve an opaque key handle to a TPM, TEE,
-//! or secure-element slot and keep key material inside the protected execution boundary.
+//! Production implementations keep private key material inside the TPM, TEE, or
+//! secure element. The preferred API is operation-based: callers submit data and
+//! receive only the cryptographic result, never the private key bytes.
 
 #![allow(dead_code)]
 
-/// Hardware key slot selected by the capability layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HardwareKeyHandle(pub u64);
 
-/// Hardware-backed identity-key failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentityKeyOperation {
+    Encrypt,
+    Decrypt,
+    Hmac,
+    Sign,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HardwareKeyError {
     InvalidHandle,
     NotProvisioned,
     Unavailable,
     AccessDenied,
+    UnsupportedOperation,
+    InvalidInput,
+    OutputTooSmall,
     HardwareFailure,
 }
 
-/// Minimal HAL required by the identity key service.
-///
-/// Implementations must not persist or export the key through ordinary storage or
-/// configuration. The returned bytes are transient and must be zeroized by callers.
+/// Preferred HAL contract. Key material never crosses this boundary.
 pub trait IdentityKeyHal {
+    fn cryptographic_operation(
+        &self,
+        handle: HardwareKeyHandle,
+        operation: IdentityKeyOperation,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> Result<usize, HardwareKeyError>;
+}
+
+/// Explicit legacy boundary retained only for migration of old tests/backends.
+/// Production TPM/TEE implementations MUST NOT implement this trait.
+#[deprecated(note = "use IdentityKeyHal::cryptographic_operation; raw key export is not production-safe")]
+pub trait LegacyIdentityKeyHal {
     fn load_encryption_key(
         &self,
         handle: HardwareKeyHandle,
     ) -> Result<[u8; 32], HardwareKeyError>;
 }
 
-/// Explicit production backend marker. No software implementation is provided.
 pub struct HardwareIdentityKeyBackend<H> {
     hal: H,
 }
@@ -40,25 +58,36 @@ impl<H> HardwareIdentityKeyBackend<H> {
     pub const fn new(hal: H) -> Self {
         Self { hal }
     }
-}
 
-impl<H: IdentityKeyHal> super::identity_key_service::IdentityKeyBackend
-    for HardwareIdentityKeyBackend<H>
-{
-    fn load_key(
+    pub fn cryptographic_operation(
         &self,
         handle: super::identity_key_service::KeyHandle,
-    ) -> Result<[u8; 32], super::identity_key_service::IdentityKeyError> {
+        operation: IdentityKeyOperation,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> Result<usize, super::identity_key_service::IdentityKeyError>
+    where
+        H: IdentityKeyHal,
+    {
         self.hal
-            .load_encryption_key(HardwareKeyHandle(handle.0))
-            .map_err(|error| match error {
-                HardwareKeyError::InvalidHandle => super::identity_key_service::IdentityKeyError::InvalidHandle,
-                HardwareKeyError::AccessDenied => super::identity_key_service::IdentityKeyError::NotAuthorized,
-                HardwareKeyError::NotProvisioned => super::identity_key_service::IdentityKeyError::KeyUnavailable,
-                HardwareKeyError::Unavailable | HardwareKeyError::HardwareFailure => {
-                    super::identity_key_service::IdentityKeyError::HardwareFailure
-                }
-            })
+            .cryptographic_operation(HardwareKeyHandle(handle.0), operation, input, output)
+            .map_err(map_hardware_error)
+    }
+}
+
+fn map_hardware_error(
+    error: HardwareKeyError,
+) -> super::identity_key_service::IdentityKeyError {
+    use super::identity_key_service::IdentityKeyError;
+    match error {
+        HardwareKeyError::InvalidHandle => IdentityKeyError::InvalidHandle,
+        HardwareKeyError::AccessDenied => IdentityKeyError::NotAuthorized,
+        HardwareKeyError::NotProvisioned => IdentityKeyError::KeyUnavailable,
+        HardwareKeyError::Unavailable
+        | HardwareKeyError::UnsupportedOperation
+        | HardwareKeyError::InvalidInput
+        | HardwareKeyError::OutputTooSmall
+        | HardwareKeyError::HardwareFailure => IdentityKeyError::HardwareFailure,
     }
 }
 
@@ -69,34 +98,52 @@ mod tests {
     struct TestHal;
 
     impl IdentityKeyHal for TestHal {
-        fn load_encryption_key(
+        fn cryptographic_operation(
             &self,
             handle: HardwareKeyHandle,
-        ) -> Result<[u8; 32], HardwareKeyError> {
+            operation: IdentityKeyOperation,
+            input: &[u8],
+            output: &mut [u8],
+        ) -> Result<usize, HardwareKeyError> {
             if handle.0 == 0 {
                 return Err(HardwareKeyError::InvalidHandle);
             }
-            Ok([0xA5; 32])
+            if !matches!(operation, IdentityKeyOperation::Hmac) {
+                return Err(HardwareKeyError::UnsupportedOperation);
+            }
+            if output.len() < input.len() {
+                return Err(HardwareKeyError::OutputTooSmall);
+            }
+            output[..input.len()].copy_from_slice(input);
+            Ok(input.len())
         }
     }
 
     #[test]
-    fn hardware_backend_maps_success() {
+    fn operation_returns_only_result() {
         let backend = HardwareIdentityKeyBackend::new(TestHal);
-        let key = super::super::identity_key_service::IdentityKeyBackend::load_key(
-            &backend,
-            super::super::identity_key_service::KeyHandle(1),
-        )
-        .unwrap();
-        assert_eq!(key, [0xA5; 32]);
+        let mut output = [0u8; 4];
+        let written = backend
+            .cryptographic_operation(
+                super::super::identity_key_service::KeyHandle(1),
+                IdentityKeyOperation::Hmac,
+                b"test",
+                &mut output,
+            )
+            .unwrap();
+        assert_eq!(written, 4);
+        assert_eq!(&output, b"test");
     }
 
     #[test]
-    fn invalid_hardware_handle_fails_closed() {
+    fn invalid_handle_fails_closed() {
         let backend = HardwareIdentityKeyBackend::new(TestHal);
-        let result = super::super::identity_key_service::IdentityKeyBackend::load_key(
-            &backend,
+        let mut output = [0u8; 4];
+        let result = backend.cryptographic_operation(
             super::super::identity_key_service::KeyHandle(0),
+            IdentityKeyOperation::Hmac,
+            b"test",
+            &mut output,
         );
         assert_eq!(
             result,
