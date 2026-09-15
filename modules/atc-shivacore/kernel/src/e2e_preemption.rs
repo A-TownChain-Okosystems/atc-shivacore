@@ -35,26 +35,24 @@ pub unsafe fn prepare(
     let stack_a = stacks.allocate(PROCESS_A, scheduler.address_spaces_mut(), frame_allocator).expect("E2E: kernel stack A failed");
     let stack_b = stacks.allocate(PROCESS_B, scheduler.address_spaces_mut(), frame_allocator).expect("E2E: kernel stack B failed");
 
-    map_user_image(scheduler, PROCESS_A, USER_CODE_A, USER_STACK_A, frame_allocator, physical_memory_offset);
-    map_user_image(scheduler, PROCESS_B, USER_CODE_B, USER_STACK_B, frame_allocator, physical_memory_offset);
+    map_user_image(scheduler, PROCESS_A, USER_CODE_A, USER_STACK_A, frame_allocator, physical_memory_offset, b"E2E_PREEMPTION_A\n");
+    map_user_image(scheduler, PROCESS_B, USER_CODE_B, USER_STACK_B, frame_allocator, physical_memory_offset, b"E2E_PREEMPTION_B\n");
 
     let context_ptr_a = initialize_context(stack_a, USER_CODE_A, USER_STACK_A, physical_memory_offset);
     let context_ptr_b = initialize_context(stack_b, USER_CODE_B, USER_STACK_B, physical_memory_offset);
 
     scheduler.address_spaces_mut().switch_to(PROCESS_B).expect("E2E: activate B for validation failed");
-    let root_b = scheduler.address_spaces().root(PROCESS_B).expect("E2E: root B missing");
     let context_b = Box::new(ProcessExecutionContext::new(
         PROCESS_B,
-        root_b,
+        scheduler.address_spaces().root(PROCESS_B).expect("E2E: root B missing"),
         ExecutionKernelStack::new(stack_b.base(), stack_b.top()),
         context_ptr_b,
     ).expect("E2E: validate context B failed"));
 
     scheduler.address_spaces_mut().switch_to(PROCESS_A).expect("E2E: activate A for validation failed");
-    let root_a = scheduler.address_spaces().root(PROCESS_A).expect("E2E: root A missing");
     let context_a = Box::new(ProcessExecutionContext::new(
         PROCESS_A,
-        root_a,
+        scheduler.address_spaces().root(PROCESS_A).expect("E2E: root A missing"),
         ExecutionKernelStack::new(stack_a.base(), stack_a.top()),
         context_ptr_a,
     ).expect("E2E: validate context A failed"));
@@ -71,6 +69,7 @@ unsafe fn map_user_image(
     stack: u64,
     frame_allocator: &mut BootInfoFrameAllocator,
     physical_memory_offset: VirtAddr,
+    marker: &[u8],
 ) {
     let code_frame = frame_allocator.allocate_frame().expect("E2E: code frame allocation failed");
     let stack_frame = frame_allocator.allocate_frame().expect("E2E: user stack frame allocation failed");
@@ -80,10 +79,17 @@ unsafe fn map_user_image(
     table.map_user_page(code_page, code_frame, PageFlags::READ.union(PageFlags::EXECUTE).union(PageFlags::USER), frame_allocator).expect("E2E: code mapping failed");
     table.map_user_page(stack_page, stack_frame, PageFlags::READ.union(PageFlags::WRITE).union(PageFlags::USER), frame_allocator).expect("E2E: stack mapping failed");
 
-    // EB FE = jmp $; the timer IRQ is the only exit path.
+    // Test-only Ring-3 serial marker. IOPL=3 is restricted to this E2E image.
+    let mut code_bytes = [0u8; 128];
+    let mut cursor = 0usize;
+    code_bytes[cursor..cursor + 3].copy_from_slice(&[0xba, 0xf8, 0x03]); cursor += 3; // mov dx, 0x3f8
+    for byte in marker.iter().copied() {
+        code_bytes[cursor..cursor + 2].copy_from_slice(&[0xb0, byte]); cursor += 2; // mov al, imm8
+        code_bytes[cursor..cursor + 2].copy_from_slice(&[0xee, 0x90]); cursor += 2; // out dx, al; nop
+    }
+    code_bytes[cursor..cursor + 2].copy_from_slice(&[0xeb, 0xfe]); // jmp $
     let code_ptr = (physical_memory_offset + code_frame.start_address().as_u64()).as_mut_ptr::<u8>();
-    core::ptr::write(code_ptr, 0xEB);
-    core::ptr::write(code_ptr.add(1), 0xFE);
+    core::ptr::copy_nonoverlapping(code_bytes.as_ptr(), code_ptr, cursor + 2);
 }
 
 unsafe fn initialize_context(
@@ -92,7 +98,10 @@ unsafe fn initialize_context(
     user_stack: u64,
     physical_memory_offset: VirtAddr,
 ) -> *const ContextStack {
-    let context_address = stack.top() - size_of::<ContextStack>() as u64;
+    // A timer IRQ pushes exactly one ContextStack-sized frame. Leave that
+    // frame-sized region below RSP0 so the first IRQ cannot overwrite this
+    // initial target context.
+    let context_address = stack.top() - (2 * size_of::<ContextStack>()) as u64;
     assert_eq!(context_address & 0xF, 0, "E2E: context stack must be 16-byte aligned");
     let last_frame = stack.frame(DEFAULT_STACK_PAGES - 1).expect("E2E: last kernel-stack frame missing");
     let last_page_base = stack.base() + (DEFAULT_STACK_PAGES as u64 - 1) * PAGE_SIZE;
@@ -105,7 +114,8 @@ unsafe fn initialize_context(
         iret: IretFrame {
             rip: user_rip,
             cs: gdt::user_code_selector() as u64,
-            rflags: 0x202,
+            // IOPL=3 is test-only and permits the marker code to access COM1.
+            rflags: 0x3202,
             rsp: user_stack + PAGE_SIZE - 16,
             ss: gdt::user_data_selector() as u64,
         },
