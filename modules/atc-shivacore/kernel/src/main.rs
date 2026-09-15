@@ -4,9 +4,8 @@
 // Framebuffer-Textausgabe.
 // K-Sprint 1: GDT + TSS (Double-Fault-Stack), IDT (Breakpoint/Double-Fault/
 // Page-Fault), PIC-Remapping (0x20-0x2F), Timer+Keyboard-Interrupts aktiv.
-// K-Sprint 2: Paging-Mapper (OffsetPageTable), Frame-Allocator, Heap-
-// Allokator (linked_list_allocator) -- `alloc` (Box/Vec/String) nutzbar.
-// Kein Linux-Unterbau, kein Fremdcode jenseits des minimalen Boot-Protokolls.
+// K-Sprint 2: Paging-Mapper, Frame-Allocator, Heap-Allokator.
+// K-Sprint TPM: ACPI RSDP/XSDT -> TPM2 -> CRB Locality-0 MMIO probe.
 #![no_std]
 #![feature(abi_x86_interrupt)]
 #![feature(alloc_error_handler)]
@@ -14,12 +13,14 @@
 
 extern crate alloc;
 
+mod acpi;
 mod allocator;
 mod ats1000;
 mod framebuffer;
 mod gdt;
 mod interrupts;
 mod memory;
+mod mmio;
 mod serial;
 
 use alloc::{boxed::Box, vec::Vec};
@@ -29,8 +30,6 @@ use bootloader_api::{
 };
 use core::panic::PanicInfo;
 
-// Bootloader anweisen, das gesamte physische RAM linear ins virtuelle
-// Adressvolumen zu mappen (Voraussetzung fuer den Paging-Mapper in memory.rs).
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
     config.mappings.physical_memory = Some(Mapping::Dynamic);
@@ -44,7 +43,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     if let Some(fb) = boot_info.framebuffer.as_mut() {
         framebuffer::init(fb);
-        println!("ShivaCore Kernel v0.0.3 -- K-Sprint 2");
+        println!("ShivaCore Kernel v0.0.3 -- K-Sprint 2 + TPM");
         println!("Boot: OK | Serial: OK | Framebuffer: OK");
     } else {
         serial_println!("ShivaCore: WARNUNG -- kein Framebuffer vom Bootloader erhalten.");
@@ -69,33 +68,61 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         .expect("Heap-Initialisierung fehlgeschlagen");
     serial_println!("ShivaCore: Paging-Mapper + Heap initialisiert (100 KiB).");
 
-    // Heap live testen: Box + Vec muessen funktionieren, ohne zu crashen.
+    // TPM2 ACPI discovery is read-only. No TPM command is issued until the CRB
+    // transport and Locality state have been validated by the service layer.
+    if let Some(rsdp) = boot_info.rsdp_addr.into_option() {
+        let reader = acpi::PhysicalReader::new(phys_mem_offset);
+        match reader.find_tpm2(rsdp) {
+            Ok(table) => {
+                serial_println!("ShivaCore: TPM2 ACPI table @ {:#x}, len={}", table.physical_address, table.length);
+                if table.length >= 52 {
+                    let mut tpm2 = [0u8; 52];
+                    if unsafe { reader.read(table.physical_address, &mut tpm2) }.is_ok() {
+                        let reserved = u16::from_le_bytes([tpm2[38], tpm2[39]]);
+                        let control_area = u64::from_le_bytes([
+                            tpm2[40], tpm2[41], tpm2[42], tpm2[43],
+                            tpm2[44], tpm2[45], tpm2[46], tpm2[47],
+                        ]);
+                        let start_method = u32::from_le_bytes([tpm2[48], tpm2[49], tpm2[50], tpm2[51]]);
+                        if reserved == 0 && start_method == 7 && control_area != 0 {
+                            match mmio::map_mmio(&mut mapper, &mut frame_allocator, x86_64::PhysAddr::new(control_area), 0x1000) {
+                                Ok(region) => match unsafe { region.read_u32(0x00) } {
+                                    Ok(locality_state) => serial_println!("ShivaCore: TPM2 CRB MMIO probe OK | control_area={:#x} locality_state={:#010x}", control_area, locality_state),
+                                    Err(_) => serial_println!("ShivaCore: TPM2 CRB MMIO mapped, locality-state read failed"),
+                                },
+                                Err(_) => serial_println!("ShivaCore: TPM2 CRB MMIO mapping failed"),
+                            }
+                        } else {
+                            serial_println!("ShivaCore: TPM2 ACPI descriptor rejected");
+                        }
+                    }
+                }
+            }
+            Err(acpi::AcpiError::NotFound) => serial_println!("ShivaCore: no TPM2 ACPI table found"),
+            Err(_) => serial_println!("ShivaCore: TPM2 ACPI discovery failed closed"),
+        }
+    } else {
+        serial_println!("ShivaCore: no ACPI RSDP supplied by bootloader");
+    }
+
     let boxed = Box::new(41);
     serial_println!("ShivaCore: Box-Test -- Wert: {}", *boxed);
 
     let mut vec = Vec::new();
-    for i in 0..10 {
-        vec.push(i);
-    }
+    for i in 0..10 { vec.push(i); }
     serial_println!("ShivaCore: Vec-Test -- Summe 0..10: {}", vec.iter().sum::<i32>());
 
     println!("K-Sprint 2: Paging/Heap OK (Box+Vec getestet)");
     serial_println!("ShivaCore: K-Sprint 2 abgeschlossen. Uebergabe an Idle-Loop.");
 
-    loop {
-        x86_64::instructions::hlt();
-    }
+    loop { x86_64::instructions::hlt(); }
 }
 
 #[alloc_error_handler]
-fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
-    panic!("Allokation fehlgeschlagen: {:?}", layout)
-}
+fn alloc_error_handler(layout: core::alloc::Layout) -> ! { panic!("Allokation fehlgeschlagen: {:?}", layout) }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     serial_println!("ShivaCore: KERNEL PANIC -- {}", info);
-    loop {
-        x86_64::instructions::hlt();
-    }
+    loop { x86_64::instructions::hlt(); }
 }
