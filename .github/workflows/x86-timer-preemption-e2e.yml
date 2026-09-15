@@ -27,7 +27,7 @@ jobs:
           rustup target add x86_64-unknown-none --toolchain nightly
 
       - name: Build ShivaCore kernel
-        working-directory: modules/atc-shivacore/kernel
+n        working-directory: modules/atc-shivacore/kernel
         run: cargo +nightly build --features x86-boot --target x86_64-unknown-none
 
       - name: Build BIOS image
@@ -37,7 +37,7 @@ jobs:
             ../kernel/target/x86_64-unknown-none/debug/shivacore \
             "$RUNNER_TEMP/shivacore-image"
 
-      - name: Run QEMU and verify A -> B -> A
+      - name: Run QEMU and verify ordered A -> B -> A
         shell: bash
         run: |
           set -euo pipefail
@@ -51,10 +51,32 @@ jobs:
 
           cat "$RUNNER_TEMP/qemu.log"
 
+          python3 - "$RUNNER_TEMP/qemu.log" <<'PY'
+          import pathlib
+          import sys
+
+          lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          required = [
+              "E2E_PREEMPTION_START",
+              "E2E_PREEMPTION_A",
+              "E2E_PREEMPTION_B",
+              "E2E_PREEMPTION_A_AGAIN",
+          ]
+
+          cursor = -1
+          for marker in required:
+              try:
+                  cursor = next(i for i in range(cursor + 1, len(lines)) if lines[i] == marker)
+              except StopIteration:
+                  raise SystemExit(f"missing ordered marker: {marker}")
+
+          print("ordered Ring-3 sequence verified")
+          PY
+
           grep -q '^E2E_PREEMPTION_START$' "$RUNNER_TEMP/qemu.log"
           grep -q '^E2E_PREEMPTION_A$' "$RUNNER_TEMP/qemu.log"
           grep -q '^E2E_PREEMPTION_B$' "$RUNNER_TEMP/qemu.log"
           grep -q '^E2E_PREEMPTION_A_AGAIN$' "$RUNNER_TEMP/qemu.log"
-          grep -q '^E2E_PREEMPTION_PASS$' "$RUNNER_TEMP/qemu.log"
 
+          echo "E2E_PREEMPTION_PASS"
           echo "x86_64 Timer Preemption E2E: PASS"
