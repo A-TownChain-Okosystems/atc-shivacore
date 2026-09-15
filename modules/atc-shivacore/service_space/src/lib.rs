@@ -26,3 +26,4 @@ pub mod identity_key_service;
 pub mod identity_key_hal;
 pub mod tpm2;
 pub mod tpm2_command;
+pub mod tpm2_crb;
