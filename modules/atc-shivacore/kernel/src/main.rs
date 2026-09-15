@@ -75,8 +75,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         e2e_preemption::prepare(&mut scheduler, &mut stacks, &mut mapper, &mut frame_allocator, phys_mem_offset)
     };
 
-    serial_println!("E2E_PREEMPTION_A");
-
     let scheduler: &'static mut ProcessScheduler = Box::leak(Box::new(scheduler));
     let stacks: &'static KernelStackManager = Box::leak(Box::new(stacks));
     let activator: &'static mut TssKernelStackActivator = Box::leak(Box::new(TssKernelStackActivator));
