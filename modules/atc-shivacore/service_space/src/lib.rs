@@ -30,3 +30,5 @@ pub mod tpm2_crb;
 pub mod tpm2_commands;
 pub mod tpm2_locality;
 pub mod tpm2_engine;
+#[cfg(feature = "x86-tpm")]
+pub mod tpm2_x86_mmio;
