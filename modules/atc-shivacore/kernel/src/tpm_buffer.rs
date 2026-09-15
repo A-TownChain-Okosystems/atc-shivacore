@@ -70,8 +70,14 @@ impl TpmBufferAccess {
         false
     }
 
+    /// Validate an entire physical range without dereferencing it.
+    pub fn validate_range(&self, address: u64, len: usize) -> Result<(), TpmBufferError> {
+        if len == 0 { return Err(TpmBufferError::LengthTooLarge); }
+        if self.allowed(address, len) { Ok(()) } else { Err(TpmBufferError::RangeNotAllowed) }
+    }
+
     fn virtual_range(&self, address: u64, len: usize) -> Result<*mut u8, TpmBufferError> {
-        if !self.allowed(address, len) { return Err(TpmBufferError::RangeNotAllowed); }
+        self.validate_range(address, len)?;
         let virtual_address = VirtAddr::new(
             self.physical_memory_offset.as_u64()
                 .checked_add(address)
