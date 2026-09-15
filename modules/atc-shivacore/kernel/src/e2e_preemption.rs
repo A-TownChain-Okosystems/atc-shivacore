@@ -35,8 +35,8 @@ pub unsafe fn prepare(
     let stack_a = stacks.allocate(PROCESS_A, scheduler.address_spaces_mut(), frame_allocator).expect("E2E: kernel stack A failed");
     let stack_b = stacks.allocate(PROCESS_B, scheduler.address_spaces_mut(), frame_allocator).expect("E2E: kernel stack B failed");
 
-    map_user_image(scheduler, PROCESS_A, USER_CODE_A, USER_STACK_A, frame_allocator, physical_memory_offset, b"E2E_PREEMPTION_A\n");
-    map_user_image(scheduler, PROCESS_B, USER_CODE_B, USER_STACK_B, frame_allocator, physical_memory_offset, b"E2E_PREEMPTION_B\n");
+    map_user_image(scheduler, PROCESS_A, USER_CODE_A, USER_STACK_A, frame_allocator, physical_memory_offset, b"E2E_PREEMPTION_A\n", Some(b"E2E_PREEMPTION_A_AGAIN\n"));
+    map_user_image(scheduler, PROCESS_B, USER_CODE_B, USER_STACK_B, frame_allocator, physical_memory_offset, b"E2E_PREEMPTION_B\n", None);
 
     let context_ptr_a = initialize_context(stack_a, USER_CODE_A, USER_STACK_A, physical_memory_offset);
     let context_ptr_b = initialize_context(stack_b, USER_CODE_B, USER_STACK_B, physical_memory_offset);
@@ -69,7 +69,8 @@ unsafe fn map_user_image(
     stack: u64,
     frame_allocator: &mut BootInfoFrameAllocator,
     physical_memory_offset: VirtAddr,
-    marker: &[u8],
+    first_marker: &[u8],
+    second_marker: Option<&[u8]>,
 ) {
     let code_frame = frame_allocator.allocate_frame().expect("E2E: code frame allocation failed");
     let stack_frame = frame_allocator.allocate_frame().expect("E2E: user stack frame allocation failed");
@@ -79,17 +80,46 @@ unsafe fn map_user_image(
     table.map_user_page(code_page, code_frame, PageFlags::READ.union(PageFlags::EXECUTE).union(PageFlags::USER), frame_allocator).expect("E2E: code mapping failed");
     table.map_user_page(stack_page, stack_frame, PageFlags::READ.union(PageFlags::WRITE).union(PageFlags::USER), frame_allocator).expect("E2E: stack mapping failed");
 
-    // Test-only Ring-3 serial marker. IOPL=3 is restricted to this E2E image.
-    let mut code_bytes = [0u8; 128];
+    // The flag lives on the process-owned user stack and is initialized before
+    // Ring-3 entry. A prints A on its first pass and A_AGAIN on a later pass;
+    // therefore A_AGAIN can only appear after the CPU has actually resumed A.
+    let stack_ptr = (physical_memory_offset + stack_frame.start_address().as_u64()).as_mut_ptr::<u8>();
+    core::ptr::write(stack_ptr, 0);
+
+    // Test-only Ring-3 serial output. IOPL=3 is restricted to this E2E image.
+    let mut code_bytes = [0u8; 256];
     let mut cursor = 0usize;
+    let start = cursor;
     code_bytes[cursor..cursor + 3].copy_from_slice(&[0xba, 0xf8, 0x03]); cursor += 3; // mov dx, 0x3f8
-    for byte in marker.iter().copied() {
-        code_bytes[cursor..cursor + 2].copy_from_slice(&[0xb0, byte]); cursor += 2; // mov al, imm8
-        code_bytes[cursor..cursor + 2].copy_from_slice(&[0xee, 0x90]); cursor += 2; // out dx, al; nop
+    if second_marker.is_some() {
+        code_bytes[cursor..cursor + 3].copy_from_slice(&[0x8a, 0x04, 0x24]); cursor += 3; // mov al, [rsp]
+        code_bytes[cursor..cursor + 2].copy_from_slice(&[0x84, 0xc0]); cursor += 2; // test al, al
+        let jne_pos = cursor; code_bytes[cursor..cursor + 2].copy_from_slice(&[0x75, 0]); cursor += 2;
+        emit_marker(&mut code_bytes, &mut cursor, first_marker);
+        code_bytes[cursor..cursor + 4].copy_from_slice(&[0xc6, 0x04, 0x24, 0x01]); cursor += 4; // mov byte [rsp], 1
+        let back_pos = cursor; code_bytes[cursor..cursor + 2].copy_from_slice(&[0xeb, 0]); cursor += 2;
+        let second_pos = cursor;
+        let rel_second = (second_pos as isize - (jne_pos + 2) as isize) as i8;
+        code_bytes[jne_pos + 1] = rel_second as u8;
+        emit_marker(&mut code_bytes, &mut cursor, second_marker.unwrap());
+        let rel_start = (start as isize - (back_pos + 2) as isize) as i8;
+        code_bytes[back_pos + 1] = rel_start as u8;
+    } else {
+        emit_marker(&mut code_bytes, &mut cursor, first_marker);
+        let loop_pos = cursor;
+        code_bytes[cursor..cursor + 2].copy_from_slice(&[0xeb, 0]); cursor += 2;
+        let rel = (loop_pos as isize - (loop_pos + 2) as isize) as i8;
+        code_bytes[loop_pos + 1] = rel as u8;
     }
-    code_bytes[cursor..cursor + 2].copy_from_slice(&[0xeb, 0xfe]); // jmp $
     let code_ptr = (physical_memory_offset + code_frame.start_address().as_u64()).as_mut_ptr::<u8>();
-    core::ptr::copy_nonoverlapping(code_bytes.as_ptr(), code_ptr, cursor + 2);
+    core::ptr::copy_nonoverlapping(code_bytes.as_ptr(), code_ptr, cursor);
+}
+
+unsafe fn emit_marker(code: &mut [u8; 256], cursor: &mut usize, marker: &[u8]) {
+    for byte in marker.iter().copied() {
+        code[*cursor..*cursor + 2].copy_from_slice(&[0xb0, byte]); *cursor += 2; // mov al, imm8
+        code[*cursor..*cursor + 2].copy_from_slice(&[0xee, 0x90]); *cursor += 2; // out dx, al; nop
+    }
 }
 
 unsafe fn initialize_context(
@@ -98,9 +128,7 @@ unsafe fn initialize_context(
     user_stack: u64,
     physical_memory_offset: VirtAddr,
 ) -> *const ContextStack {
-    // A timer IRQ pushes exactly one ContextStack-sized frame. Leave that
-    // frame-sized region below RSP0 so the first IRQ cannot overwrite this
-    // initial target context.
+    // Keep a full timer-entry frame between RSP0 and the initial context.
     let context_address = stack.top() - (2 * size_of::<ContextStack>()) as u64;
     assert_eq!(context_address & 0xF, 0, "E2E: context stack must be 16-byte aligned");
     let last_frame = stack.frame(DEFAULT_STACK_PAGES - 1).expect("E2E: last kernel-stack frame missing");
@@ -114,7 +142,6 @@ unsafe fn initialize_context(
         iret: IretFrame {
             rip: user_rip,
             cs: gdt::user_code_selector() as u64,
-            // IOPL=3 is test-only and permits the marker code to access COM1.
             rflags: 0x3202,
             rsp: user_stack + PAGE_SIZE - 16,
             ss: gdt::user_data_selector() as u64,
