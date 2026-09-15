@@ -24,6 +24,8 @@ pub mod ats1000;
 pub mod acpi;
 #[cfg(feature = "x86-boot")]
 pub mod mmio;
+#[cfg(feature = "x86-boot")]
+pub mod tpm_buffer;
 pub mod net; // [K12] Netz-Primitive (HAL-Ebene) — verbleibt im Kernel (AD-028-Justierung)
 // [AD-028] Service-Space-Migration: blockchain, consensus, genesis, genesis_bridge,
 // gossip_bridge, atcnet, net, did, remote_caps, knowledge_graph, security_audit
