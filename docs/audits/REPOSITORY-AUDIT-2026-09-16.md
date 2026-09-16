@@ -1,7 +1,7 @@
 ---
 document_id: ATC-AUDIT-SHIVA-20260916
 title: Repository Audit — atc-shivacore
-version: 1.0.0
+version: 1.1.0
 status: active
 owner: A-TownChain-Okosystems
 audit_date: 2026-09-16
@@ -23,9 +23,9 @@ CI-independent source/repository audit performed against the current `main` stat
 **Family:** kernel / canonical-source / repository-metadata  
 **Tags:** P1, shivacore, canonical-source, governance, metadata, consistency
 
-`.atc/repository.yaml` declared `CORE`, `R4`, `production` and `canonical kernel`, while `STATUS.md` and the repository README state that the active canonical kernel source was migrated to `globus-os/modules/atc-shivacore/kernel/` and this repository is supporting material.
+`.atc/repository.yaml` declared `CORE`, `R4`, `production` and `canonical kernel`, while `STATUS.md` and the README state that the active canonical kernel source is `globus-os/modules/atc-shivacore/kernel/` and this repository is supporting material.
 
-**Correction:** classify the repository as supporting infrastructure (`INFRA`, `R3`, `development`) and set `canonical: false` for the kernel capability.
+**Correction:** repository metadata is changed to `INFRA`, `R3`, `development`; the kernel capability is explicitly non-canonical here.
 
 ### F-20260916-SHIVA-002 — P1 — Stale evidence binding
 
@@ -34,9 +34,9 @@ CI-independent source/repository audit performed against the current `main` stat
 **Family:** governance / audit / release-evidence  
 **Tags:** P1, evidence, stale, bound-commit, shivacore, traceability
 
-`.atc/evidence/evidence.yaml` was bound to an earlier kernel-source commit while the active kernel source had already moved to `globus-os`. The evidence also claimed the repository itself was canonical.
+`.atc/evidence/evidence.yaml` was bound to an earlier kernel-source commit and asserted a canonical role that is no longer true.
 
-**Correction:** evidence now explicitly remains unbound until verification CI produces current evidence, and the canonical role is false.
+**Correction:** evidence is now explicitly unbound/pending until current verification CI produces commit-bound evidence, and the canonical role is false.
 
 ### F-20260916-SHIVA-003 — P1 — Invalid local build instructions
 
@@ -45,22 +45,20 @@ CI-independent source/repository audit performed against the current `main` stat
 **Family:** repository-architecture / build-system  
 **Tags:** P1, cargo, documentation-drift, build, canonical-source
 
-The root README instructed `cargo build --workspace`, but the repository has no root `Cargo.toml`. The active kernel build is owned by `globus-os`.
+The repository has no root `Cargo.toml`, so the former root `cargo build --workspace` instruction was invalid for the current checkout.
 
-**Correction:** README now directs canonical kernel verification to the `globus-os` workspace and removes the false root build contract.
+**Correction:** the README now directs canonical kernel builds/tests to `globus-os`.
 
-## Security and malware review
+## Security / hack / malware posture
 
-Static searches did not establish a malicious payload, credential exposure or unsafe workflow pattern in the inspected repository sources. CI workflows include CodeQL, dependency review, RustSec auditing and determinism checks. These controls reduce specific attack surfaces but do not mathematically prove that the repository is free of all compromise or malware.
+Static source and workflow review found no confirmed credential exposure or malicious payload in the inspected material. CI workflows include CodeQL, dependency review, RustSec auditing and determinism checks. These controls provide evidence for specific attack classes, but they do not prove universal immunity to compromise, malicious dependencies, supply-chain attacks or malware.
 
-For stronger evidence, the ecosystem still needs commit/signature verification, dependency pinning and SBOM/provenance validation, independent security review, reproducible-build comparison, secret scanning and runtime/hardware-specific testing.
+Stronger proof requires current CI results, cryptographically verified dependencies and commits, reproducible builds, SBOM/provenance validation, secret scanning, independent security review and runtime/hardware verification.
 
-## Language and file-format assessment
+## Language / file format
 
-Rust remains the correct canonical language for the low-level kernel implementation, while this repository can use Markdown/YAML for contracts and governance and Rust/Python only for supporting tooling. No blanket language migration is justified.
+Rust is appropriate for the canonical low-level kernel. Markdown/YAML are appropriate for contracts/governance. Supporting scripts may use Python/Rust as explicitly documented. No broad language migration is justified.
 
 ## Verification state
 
-**Repository status: IN PROGRESS.**
-
-The canonical-source contradiction and stale evidence are corrected on the audit branch and re-read. Final completion still requires CI verification of the branch and confirmation that no remaining repository-standard gate fails.
+**IN PROGRESS.** The identified metadata/documentation contradictions were corrected and the modified sources were re-read on the audit branch. Final closure remains dependent on current executable verification and repository-standard gates.
