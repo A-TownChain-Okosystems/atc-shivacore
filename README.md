@@ -18,7 +18,7 @@ governance:
 
 # ATC ShivaCore
 
-> Capability-basierter Rust/no_std-Microkernel als wiederverwendbare sicherheitskritische Kernel-Basis für GlobusOS. ShivaCore ist kein Blockchain-, AI- oder Game-Layer.
+> Capability-basierter Rust/no_std-Microkernel als wiederverwendbare sicherheitskritische Kernel-Basis für GlobusOS. Das aktive Kernel-Source-of-Truth liegt inzwischen in `globus-os`; dieses Repository enthält unterstützendes ShivaCore-Material.
 
 **Project:** `atc-shivacore`  
 **Organization:** `A-TownChain-Okosystems`  
@@ -29,22 +29,21 @@ governance:
 
 ## Role and Scope
 
-ShivaCore stellt den wiederverwendbaren Kernel-/TCB-Baustein des Ökosystems bereit. Der normative Kernelvertrag ist OS-neutral und konzentriert sich auf Isolation, Capability-basierte Autorisierung, Scheduling, Memory, IPC, Timer und die erforderlichen Low-Level-Primitiven.
+ShivaCore stellt den wiederverwendbaren Kernel-/TCB-Vertrag des Ökosystems bereit. Der aktive kanonische Kernel-Quellbaum wird in `globus-os/modules/atc-shivacore/kernel/` gebaut und verifiziert. Dieses Repository ist kein zweiter kanonischer Kernel-Source-of-Truth.
 
 **In scope:**
-- Rust/no_std-Microkernel und Capability-Schutzmodell
-- CSpace/Capability Management
-- Scheduling und Kernel-Lifecycle
-- Memory Management und IPC
-- Architektur-HAL für die tatsächlich implementierten Targets
-- Boot-/Target-Unterstützung gemäß dokumentiertem Boot Contract
+- Kernel-/TCB-Spezifikationen und Governance
+- unterstützendes Kernel- und Boot-Material
+- Wiederverwendungs-, HAL-, ABI- und Boot-Verträge
+- Dokumentation und Audit-Nachweise
 
 **Out of scope:**
-- GlobusOS-Userspace und Systemdienste (`globus-os`)
-- Aurora AI (`aurora-ai`)
+- der kanonische aktive Kernel-Quellbaum (siehe `globus-os`)
+- GlobusOS-Userspace und Systemdienste
+- Aurora AI
 - A-TownChain-Protokoll und Chain-State
 - ATCLang-Contracts und ATC-VM
-- Game-/GameFi-Anwendungen (`genesis-engine`, `genesis-chronicles`)
+- Game-/GameFi-Anwendungen
 
 ## Architecture
 
@@ -60,55 +59,37 @@ ShivaCore Microkernel / TCB
   ├─ IPC / Endpoints
   └─ Timers / Traps
         ↓
-Kernel-facing OS services
-        ↓
-GlobusOS userspace / Aurora / applications
+GlobusOS platform integration
 ```
 
-Ein anderes Betriebssystem kann denselben Kernel verwenden:
-
-```text
-OS-A userspace ──┐
-OS-B userspace ──┼──→ ShivaCore ──→ Hardware
-GlobusOS ────────┘
-```
-
-Die Wiederverwendbarkeit wird durch den Kernel-, HAL-, ABI- und Boot-Vertrag definiert, nicht durch eine README-Behauptung.
+Die Wiederverwendbarkeit wird durch den Kernel-, HAL-, ABI- und Boot-Vertrag definiert. Änderungen am kanonischen Kernel müssen im `globus-os` Repository erfolgen, damit dieselbe CI- und Integrationskette den TCB prüft.
 
 ## Current Implementation Boundary
 
-Das Repository enthält neben dem minimalen TCB weitere historische/experimentelle Kernel-Module. Diese sind nicht automatisch Teil des normativen Microkernel-Vertrags. OS-, Blockchain- oder AI-Semantik darf nicht ohne Governance und TCB-Review in den Kernvertrag aufgenommen werden.
+Historische oder experimentelle Kernel-Bestandteile in diesem Repository sind nicht automatisch Teil des normativen Microkernel-Vertrags. OS-, Blockchain- oder AI-Semantik darf nicht ohne Governance und TCB-Review in den Kernvertrag aufgenommen werden.
 
 ## Requirements
 
-- Rust 1.98.1 oder neuer, sofern der aktuelle Workspace dies voraussetzt
-- Cargo und Build-Essentials
-- unterstützte `x86_64-unknown-none` bzw. `aarch64-unknown-none` Targets, sofern vom jeweiligen Modul aktiviert
-- Python 3.10+ für vorhandene Workspace-Hilfsskripte
+- Rust für vorhandene Rust-Tools und unterstützende Komponenten
+- Python nur für explizit dokumentierte Hilfsskripte
+- Git
+- Für kanonische Kernel-Builds gelten die Toolchain- und Target-Anforderungen von `globus-os`
 
 ## Installation
 
-```bash
-git clone https://github.com/A-TownChain-Okosystems/atc-shivacore.git
-cd atc-shivacore
-cargo build --workspace
-```
-
-## Boot / Image Builder
-
-Der Repository-Workspace enthält einen separaten Boot-Image-Builder für BIOS/UEFI. Die konkrete Target-Unterstützung muss durch aktuelle CI-Evidence bestätigt werden.
+Dieses Repository ist primär ein Governance-/Dokumentations- und Support-Repository. Der kanonische Kernel-Build erfolgt im `globus-os` Repository:
 
 ```bash
-cargo run --bin boot --manifest-path modules/atc-shivacore/boot/Cargo.toml -- <kernel-elf> <output-dir>
-```
-
-## Testing
-
-```bash
+git clone https://github.com/A-TownChain-Okosystems/globus-os.git
+cd globus-os
 cargo test --workspace
 ```
 
-Testergebnisse gelten immer für den jeweiligen Commit und werden nicht als dauerhafte Testzahl im README garantiert.
+Vor einem Build sind die aktuellen `globus-os` Manifest-, Target- und CI-Vorgaben maßgeblich.
+
+## Testing
+
+Kanonische Kernel-Tests müssen aus dem aktuellen `globus-os` CI-Lauf stammen. Historische Testzahlen in diesem Repository gelten nicht als permanente Verifikation.
 
 ## Documentation
 
@@ -116,22 +97,24 @@ Testergebnisse gelten immer für den jeweiligen Commit und werden nicht als daue
 - [`STATUS.md`](STATUS.md)
 - [`ROADMAP.md`](ROADMAP.md)
 - [`SECURITY.md`](SECURITY.md)
-- [`docs/specs/SHIVA-KERNEL-REUSE-001.md`](docs/specs/SHIVA-KERNEL-REUSE-001.md) — Reusable Kernel Contract
-- [`docs/specs/SHIVA-HAL-001.md`](docs/specs/SHIVA-HAL-001.md) — Hardware Abstraction Layer
-- [`docs/specs/SHIVA-ABI-001.md`](docs/specs/SHIVA-ABI-001.md) — Kernel/Userspace ABI
-- [`docs/specs/SHIVA-BOOT-001.md`](docs/specs/SHIVA-BOOT-001.md) — Boot Contract
+- [`docs/specs/SHIVA-KERNEL-REUSE-001.md`](docs/specs/SHIVA-KERNEL-REUSE-001.md)
+- [`docs/specs/SHIVA-HAL-001.md`](docs/specs/SHIVA-HAL-001.md)
+- [`docs/specs/SHIVA-ABI-001.md`](docs/specs/SHIVA-ABI-001.md)
+- [`docs/specs/SHIVA-BOOT-001.md`](docs/specs/SHIVA-BOOT-001.md)
 
 ## Security
 
 ShivaCore ist sicherheitskritische Infrastruktur. Sicherheitslücken nicht öffentlich über GitHub Issues veröffentlichen; den in `SECURITY.md` definierten Disclosure-Prozess verwenden.
+
+Die Verlagerung des kanonischen Kernel-Quellbaums in `globus-os` reduziert die Gefahr divergierender TCB-Implementierungen: Build, Tests, Lints und Integration werden an einer Stelle ausgeführt. Das ist eine Architekturkontrolle, aber kein Beweis vollständiger Angriffs- oder Malware-Immunität.
 
 ## Development and Governance
 
 - Änderungen folgen `ATC-STD-000` und dem aktuellen ATC-Governance-Prozess.
 - Architekturänderungen mit TCB-Auswirkung benötigen dokumentierte Governance-/Review-Evidence.
 - Conventional Commits verwenden.
-- Integration in `a-townchain-os` ist eine Integrationsaufgabe; ShivaCore bleibt als wiederverwendbarer Kernel eigenständig.
-- Neue family-scoped Standard-IDs verwenden `ATC-STD-F{family}-{sequence}`; historische IDs werden nicht stillschweigend umnummeriert.
+- Neue family-scoped Standard-IDs verwenden `ATC-STD-F{family}-{sequence}`.
+- Der kanonische Kernel-Source-of-Truth darf nicht in diesem Repository dupliziert werden.
 
 ## Blockchain Boundary
 
@@ -141,14 +124,26 @@ ATCLang → ATC-VM → A-TownChain
 
 ShivaCore stellt keine Chain-Semantik und keine feste Chain-ID bereit.
 
+## Roadmap
+
+Die operative Kernel-Roadmap und Umsetzungsplanung werden am kanonischen Implementierungsort `globus-os` geführt. Dieses Repository dokumentiert nur ShivaCore-spezifische Verträge, Governance und Support-Material.
+
+## Version
+
+Die Repository-Version ist `0.1.0`. Änderungen am kanonischen Kernel werden über die Versions- und Release-Prozesse von `globus-os` nachgewiesen.
+
+## Compliance
+
+Der aktuelle Repository-Zustand wird als **development / NOT_READY** geführt. `APPROVED`, `IMPLEMENTED`, `AUDITED` und `PRODUCTION_READY` sind unabhängige Zustände und dürfen nicht aus Dokumentation allein abgeleitet werden.
+
 ## License
 
 Apache-2.0. Siehe [`LICENSE`](LICENSE).
 
 ## AI Agent Instructions
 
-Vor Änderungen mindestens `AGENTS.md`, `AGENT_MANIFEST.md`, `ARCHITECTURE.md`, `STATUS.md` und `ROADMAP.md` prüfen. Änderungen am TCB, Capability-Modell, Bootpfad oder Sicherheitsgrenzen benötigen besonders sorgfältige Tests und Governance-Evidence.
+Vor Änderungen mindestens `AGENTS.md`, `AGENT_MANIFEST.md`, `ARCHITECTURE.md`, `STATUS.md` und `ROADMAP.md` prüfen. TCB-, Capability-, Boot- oder Sicherheitsgrenzen dürfen nicht gegen die Canonical-Source-Regel verschoben werden.
 
 ## ShivaCore relocation
 
-The canonical ShivaCore kernel source was moved to `A-TownChain-Okosystems/globus-os/modules/atc-shivacore` so the kernel is built and verified by the GlobusOS CI pipeline. This repository retains the surrounding ShivaCore tooling and governance material.
+The canonical ShivaCore kernel source is `A-TownChain-Okosystems/globus-os/modules/atc-shivacore/kernel/`. This repository retains supporting ShivaCore tooling, specifications and governance material.
