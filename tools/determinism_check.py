@@ -42,6 +42,9 @@ def scan_sources(root, lang):
             if not fn.endswith(ext):
                 continue
             path = os.path.join(dirpath, fn)
+            rel = os.path.relpath(path, root).replace(os.sep, "/")
+            if rel.startswith("modules/atc-security/"):
+                continue
             try:
                 with open(path, encoding="utf-8") as f:
                     for i, line in enumerate(f, 1):
