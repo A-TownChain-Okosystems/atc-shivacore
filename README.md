@@ -186,11 +186,10 @@ Components include the system services, ShivaCore integration modules and SDK. D
 
 ## Repository Structure
 ```text
-├── system
 ├── modules
 ├── sdk
 ├── docs
-└── tests
+└── .github
 ```
 
 ## Requirements
