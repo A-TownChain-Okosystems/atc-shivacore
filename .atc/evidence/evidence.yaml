@@ -5,7 +5,7 @@ schema_version: "1.0.0"
 repository: atc-shivacore
 generated: "2026-09-16"
 generated_by: "CI-independent audit correction; canonical kernel verification belongs to globus-os"
-bound_commit: 5f14d71bdff064cc490994da5f5a8dd7e3935819
+bound_commit: 8acab973a9637fcfa9a268baeab38c2e316db7b8
 maturity_class: B
 r_level: 3
 implementation:
@@ -28,8 +28,8 @@ canonical_role:
   canonical: false
 test_run:
   workflow: ATC Test Suite
-  run_id: 35323317995
-  commit: 5f14d71bdff064cc490994da5f5a8dd7e3935819
-  timestamp: 2026-09-18T08:14:16.950531+00:00
+  run_id: 35323548745
+  commit: 8acab973a9637fcfa9a268baeab38c2e316db7b8
+  timestamp: 2026-09-18T08:17:04.803080+00:00
   result: PASS
   runner: github-actions
