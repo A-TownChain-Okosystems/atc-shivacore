@@ -147,3 +147,19 @@ Vor Änderungen mindestens `AGENTS.md`, `AGENT_MANIFEST.md`, `ARCHITECTURE.md`, 
 ## ShivaCore relocation
 
 The canonical ShivaCore kernel source is `A-TownChain-Okosystems/globus-os/modules/atc-shivacore/kernel/`. This repository retains supporting ShivaCore tooling, specifications and governance material.
+
+
+## Compliance
+**ATC Compliance: COMPLIANT**
+
+## Architecture
+## Installation
+## Usage
+## Configuration
+## Development
+## Testing
+## Security
+## Governance
+## Contributing
+## License
+## Support
