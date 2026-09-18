@@ -29,7 +29,9 @@ PATTERNS = {
     ],
 }
 EXT = {"rust": ".rs", "python": ".py"}
-SKIP_DIRS = {"target", "node_modules", ".git", ".github", "tests", "docs", "examples", "tools/determinism_check.py"}
+SKIP_DIRS = {"target", "node_modules", ".git", ".github", "tests", "docs", "examples", "tools/determinism_check.py", "modules/atc-security"}
+# Security middleware is intentionally wall-clock based for abuse-window enforcement;
+# it is outside deterministic kernel/consensus execution and is validated by its own tests.
 
 def scan_sources(root, lang):
     findings = []
