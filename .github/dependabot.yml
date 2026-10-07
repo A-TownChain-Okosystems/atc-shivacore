@@ -7,17 +7,7 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
   - package-ecosystem: cargo
-    directory: "modules/atc-shivacore/boot"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-  - package-ecosystem: cargo
-    directory: "modules/atc-shivacore/kernel"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-  - package-ecosystem: cargo
-    directory: "modules/atc-shivacore/service_space"
+    directory: "sdk"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
