@@ -5,10 +5,12 @@ version: 2.2.0
 status: active
 standard: ATC-STD-MD-001
 created: 2026-09-08
-updated: 2026-09-16
+updated: 2026-10-09
 ---
 
 # Status — atc-shivacore
+
+> **Dokumentations-Refresh (2026-10-09):** Der früher unten als weiterhin offen beschriebene LKM-Dependency-API-Blocker ist in der inspizierten kanonischen Quelle `globus-os` auf Commit `aad164fb21f82025043ade4e1dad8740fcc65b69` nicht mehr in der beschriebenen Form vorhanden: `dependencies(&self, name: &str) -> Vec<String>` ist implementiert. Das ist ein Code-Sichtbefund, keine Verifikation des aktuellen Kernel-Releases; der jüngste hier geprüfte GlobusOS-CI-Stand enthält fehlgeschlagene System-/Test-/Rust-Gates. Die Evidence-SSOT unten bleibt maßgeblich für die hier beanspruchten Reifegrade.
 
 ## Property-Value Table
 
@@ -37,18 +39,9 @@ The canonical implementation path is:
 
 The separate `atc-shivacore` repository is no longer the active kernel source tree. Historical copies under `a-townchain-os-docs/docs/archive/` are reference material only and must not be treated as implementation sources.
 
-## Current implementation blocker
+## Historical finding — LKM dependency API
 
-A P1 blocker remains in the canonical GlobusOS source: `modules/atc-shivacore/kernel/src/lkm.rs` contains a placeholder `DependencyGraph::dependencies()` whose declared `&[String]` return type cannot be backed directly by the graph's `BTreeSet<String>`. The existing `get_dependencies()` method provides the deterministic owned-vector representation.
-
-This blocker is tracked in GlobusOS issue #18 with classification:
-
-- Class: P1 implementation blocker
-- Category: correctness / completeness
-- Family: kernel / loadable-kernel-modules / dependency-resolution
-- Tags: P1, stub, kernel, lkm, correctness, completeness, api
-
-It must not be represented as production-ready functionality until the API is replaced with a lifetime-safe implementation and verified by GlobusOS CI.
+The previous P1 finding described a placeholder `DependencyGraph::dependencies()` signature and pointed to GlobusOS issue #18. The current inspected source contains a lifetime-safe owned-vector API. Keep the issue/history for traceability, but do not report the original defect as still open without rechecking the current canonical source. The LKM subsystem remains subject to current GlobusOS build/test/security evidence and the repository's `latest_verified: null` state.
 
 ## Evidence policy
 
