@@ -29,6 +29,10 @@ governance:
 
 ## Role and Scope
 
+## Purpose
+
+Provide reusable ShivaCore kernel contracts, HAL/ABI/boot specifications, governance and audit support. The active kernel implementation remains in `globus-os/modules/atc-shivacore/kernel/`.
+
 ShivaCore stellt den wiederverwendbaren Kernel-/TCB-Vertrag des Ökosystems bereit. Der aktive kanonische Kernel-Quellbaum wird in `globus-os/modules/atc-shivacore/kernel/` gebaut und verifiziert. Dieses Repository ist kein zweiter kanonischer Kernel-Source-of-Truth.
 
 **In scope:**
@@ -46,6 +50,10 @@ ShivaCore stellt den wiederverwendbaren Kernel-/TCB-Vertrag des Ökosystems bere
 - A-TownChain-Protokoll und Chain-State
 - ATCLang-Contracts und ATC-VM
 - Game-/GameFi-Anwendungen
+
+## Features
+
+Documented contract areas include capabilities/CSpace, memory and address spaces, scheduling and threads, IPC endpoints, timers, traps, HAL, ABI and boot integration. These topics describe the contract scope and do not independently prove implementation or production readiness.
 
 ## Architecture
 
@@ -135,6 +143,8 @@ Die operative Kernel-Roadmap und Umsetzungsplanung werden am kanonischen Impleme
 Die Repository-Version ist `0.1.0`. Änderungen am kanonischen Kernel werden über die Versions- und Release-Prozesse von `globus-os` nachgewiesen.
 
 ## Compliance
+
+![ATC COMPLIANCE](https://img.shields.io/badge/ATC%20COMPLIANCE-R3%20%C2%B7%20ATC--STD--201%2F202%2F203-brightgreen)
 
 Der aktuelle Repository-Zustand wird als **development / NOT_READY** geführt. `APPROVED`, `IMPLEMENTED`, `AUDITED` und `PRODUCTION_READY` sind unabhängige Zustände und dürfen nicht aus Dokumentation allein abgeleitet werden.
 

@@ -3,6 +3,7 @@
 Security-Tools für das A-TownChain-Ökosystem.
 
 ## Features (geplant)
+
 - Smart Contract Auditing (Static Analysis, Pattern-Detection)
 - Fuzzing (ATCLang Bytecode Fuzzer, Coverage-Guided)
 - Formal Verification (Model-Checking, Theorem-Proving)
@@ -12,6 +13,7 @@ Security-Tools für das A-TownChain-Ökosystem.
 - Bug-Bounty-Integration (Reward-Management)
 
 ## Architektur
+
 ```text
 atc-security/
 ├── src/
@@ -24,9 +26,10 @@ atc-security/
 └── tests/
 ```
 
-
 ## Abhängigkeiten
+
 - [`A-TownChain-Okosystems/atc-shivacore`](../a-townchain-os/src/modules/atc-shivacore)
 
 ## Copyright
+
 Copyright © Michael Wroblewski / A-TownChain-Okosystems. Apache-2.0 lizenziert — siehe LICENSE
