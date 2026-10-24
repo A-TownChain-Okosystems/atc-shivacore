@@ -8,7 +8,7 @@ created: 2026-09-08
 updated: 2026-09-16
 ---
 
-# Status — atc-shivacore
+## Status — atc-shivacore
 
 ## Property-Value Table
 
