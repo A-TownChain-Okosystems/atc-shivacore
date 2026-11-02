@@ -8,7 +8,7 @@ created: 2026-09-08
 updated: 2026-10-09
 ---
 
-# Status — atc-shivacore
+## Status — atc-shivacore
 
 > **Dokumentations-Refresh (2026-10-09):** Der früher unten als weiterhin offen beschriebene LKM-Dependency-API-Blocker ist in der inspizierten kanonischen Quelle `globus-os` auf Commit `aad164fb21f82025043ade4e1dad8740fcc65b69` nicht mehr in der beschriebenen Form vorhanden: `dependencies(&self, name: &str) -> Vec<String>` ist implementiert. Das ist ein Code-Sichtbefund, keine Verifikation des aktuellen Kernel-Releases; der jüngste hier geprüfte GlobusOS-CI-Stand enthält fehlgeschlagene System-/Test-/Rust-Gates. Die Evidence-SSOT unten bleibt maßgeblich für die hier beanspruchten Reifegrade.
 

@@ -34,7 +34,6 @@ Multitasking-Tests nuetzlich) und implementieren.
 ---
 *Angelegt: 08.07.2026 -- reines Tooling-Repo, kein Kernel-Code.*
 
-
 ## ShivaCore Kernel Status (03.08.2026)
 
 Der ShivaCore-Kernel (`atc-shivacore`) hat K-Sprint 0-16 abgeschlossen:
@@ -51,8 +50,8 @@ Kernel-Entwicklung (z.B. QEMU-Scripts, Build-Hilfen, Test-Runner).
 
 Kanonische Statusquelle: `REALITY_STATUS.md` im Root von `a-townchain-os`.
 
-
 ## Kernel Status (03.08.2026)
+
 ShivaCore K0-K21: 29 Module, 441 Tests grün.
 Inkl. AI-Kernel (Aurora AI): Tensoren, NN, Vektor-Gedächtnis, LLM-Router.
 Kanonische Quelle: REALITY_STATUS.md in a-townchain-os.
